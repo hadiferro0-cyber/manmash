@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>MWM - מערכת ניהול משמרות</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&family=Heebo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #0c1f2b;
+            --ink-soft: #1c3a47;
+            --paper: #f6f3ec;
+            --card: #ffffff;
+            --line: #e6e0d4;
+            --line-soft: #efeadf;
+            --emerald: #0e9f7e;
+            --emerald-deep: #0a7d63;
+            --teal: #0f6f8c;
+            --coral: #e8654b;
+            --amber: #e8a33d;
+            --violet: #7c5cbf;
+            --muted: #6c7a80;
+            --shadow: 0 18px 45px -22px rgba(12,31,43,0.45);
+            --shadow-sm: 0 8px 22px -14px rgba(12,31,43,0.35);
+            --radius: 18px;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Heebo', 'Segoe UI', sans-serif;
+            color: var(--ink);
+            margin: 0; padding: 26px 18px 60px; direction: rtl;
+            background:
+                radial-gradient(1100px 520px at 88% -8%, rgba(14,159,126,0.14), transparent 60%),
+                radial-gradient(900px 480px at 6% 4%, rgba(15,111,140,0.12), transparent 55%),
+                radial-gradient(700px 700px at 50% 120%, rgba(232,101,75,0.08), transparent 60%),
+                var(--paper);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1520px; margin: auto;
+            background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.82));
+            backdrop-filter: blur(6px);
+            padding: 0 26px 30px; border-radius: 26px;
+            border: 1px solid rgba(255,255,255,0.7);
+            box-shadow: var(--shadow);
+        }
+
+        /* ===== App Header ===== */
+        .app-header {
+            display: flex; align-items: center; justify-content: space-between; gap: 18px;
+            margin: 0 -26px 22px; padding: 22px 30px;
+            background: linear-gradient(115deg, var(--ink) 0%, var(--ink-soft) 55%, var(--teal) 130%);
+            border-radius: 26px 26px 22px 22px; color: #fff;
+            position: relative; overflow: hidden;
+        }
+        .app-header::after {
+            content: ""; position: absolute; inset: 0;
+            background: radial-gradient(420px 220px at 12% 120%, rgba(14,159,126,0.5), transparent 70%);
+            pointer-events: none;
+        }
+        .brand { display: flex; align-items: center; gap: 14px; z-index: 1; }
+        .brand-mark {
+            width: 50px; height: 50px; border-radius: 15px; flex-shrink: 0;
+            display: grid; place-items: center; font-family: 'Rubik'; font-weight: 800; font-size: 20px;
+            background: linear-gradient(140deg, var(--emerald), var(--teal));
+            box-shadow: 0 10px 24px -8px rgba(14,159,126,0.8), inset 0 1px 0 rgba(255,255,255,0.4);
+            letter-spacing: 1px;
+        }
+        .brand-text h1 { font-family: 'Rubik'; font-weight: 800; font-size: 22px; margin: 0; text-align: right; color: #fff; letter-spacing: .3px; }
+        .brand-text p { margin: 2px 0 0; font-size: 12.5px; color: #b9d4cf; letter-spacing: .4px; }
+        .header-status { display: flex; align-items: center; gap: 10px; z-index: 1; flex-wrap: wrap; justify-content: flex-end; }
+
+        /* ===== Cloud status pill ===== */
+        .cloud-pill {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+            background: rgba(255,255,255,0.12); color: #eaf6f3; border: 1px solid rgba(255,255,255,0.22);
+            transition: all .25s;
+        }
+        .cloud-pill .dot { width: 9px; height: 9px; border-radius: 50%; background: #95a6ab; box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+        .cloud-pill.is-synced { background: rgba(14,159,126,0.22); border-color: rgba(14,159,126,0.55); color: #c9f6e9; }
+        .cloud-pill.is-synced .dot { background: #2ee6b6; box-shadow: 0 0 10px 1px rgba(46,230,182,0.8); animation: pulse 2s infinite; }
+        .cloud-pill.is-saving { background: rgba(232,163,61,0.22); border-color: rgba(232,163,61,0.5); color: #ffe6bd; }
+        .cloud-pill.is-saving .dot { background: var(--amber); }
+        .cloud-pill.is-error { background: rgba(232,101,75,0.22); border-color: rgba(232,101,75,0.55); color: #ffd6cc; }
+        .cloud-pill.is-error .dot { background: var(--coral); }
+        @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.45;} }
+
+        h2, h3 { text-align: center; color: var(--ink); margin-top: 0; }
+        h3 { font-family: 'Rubik'; font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 8px; justify-content: center; }
+
+        .section {
+            background: var(--card); border: 1px solid var(--line);
+            padding: 18px; border-radius: var(--radius); margin-bottom: 16px;
+            box-shadow: var(--shadow-sm); position: relative;
+        }
+        .section::before {
+            content: ""; position: absolute; top: 0; right: 18px; left: 18px; height: 3px;
+            border-radius: 0 0 4px 4px; background: linear-gradient(90deg, var(--emerald), var(--teal)); opacity: .85;
+        }
+        .flex-container { display: flex; gap: 22px; }
+        .sidebar { flex: 1; max-width: 330px; }
+        .main-content { flex: 4; min-width: 0; }
+
+        /* ===== Week selector / toolbar ===== */
+        .week-selector {
+            display: flex; align-items: center; gap: 12px; margin-bottom: 22px;
+            background: linear-gradient(135deg, var(--ink-soft), var(--ink));
+            color: #fff; padding: 16px 18px; border-radius: var(--radius); flex-wrap: wrap;
+            box-shadow: var(--shadow-sm);
+        }
+        .week-selector label { font-weight: 600; font-size: 14.5px; color: #cfe3df; }
+        .week-selector select {
+            width: auto; min-width: 230px; font-size: 15px; padding: 9px 12px; font-weight: 600;
+            background: rgba(255,255,255,0.96); border: none; color: var(--ink); border-radius: 10px;
+        }
+
+        input[type="text"], select {
+            padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; font-size: 14px;
+            width: 100%; box-sizing: border-box; font-family: 'Heebo', sans-serif; background: #fff; color: var(--ink);
+            transition: border-color .2s, box-shadow .2s;
+        }
+        input[type="text"]:focus, select:focus { outline: none; border-color: var(--emerald); box-shadow: 0 0 0 3px rgba(14,159,126,0.16); }
+        input[type="text"] { width: 70%; }
+        .input-group { display: flex; gap: 8px; margin-bottom: 12px; }
+
+        button {
+            padding: 10px 18px; background: linear-gradient(135deg, var(--emerald), var(--emerald-deep));
+            color: #fff; border: none; border-radius: 11px; cursor: pointer; font-size: 14px; font-weight: 700;
+            font-family: 'Heebo', sans-serif; transition: transform .12s, box-shadow .2s, filter .2s;
+            box-shadow: 0 8px 18px -10px rgba(14,159,126,0.9);
+        }
+        button:hover { transform: translateY(-1px); filter: brightness(1.05); box-shadow: 0 12px 22px -10px rgba(14,159,126,0.95); }
+        button:active { transform: translateY(0); }
+        button.danger { padding: 5px 10px; font-size: 12px; background: linear-gradient(135deg, #ef6a52, var(--coral)); box-shadow: none; border-radius: 8px; }
+        button.danger:hover { filter: brightness(1.06); }
+        button.secondary { background: linear-gradient(135deg, #51626b, #3a4a52); box-shadow: none; }
+        button.backup-btn { background: linear-gradient(135deg, #8b6fd6, var(--violet)); box-shadow: 0 8px 18px -10px rgba(124,92,191,0.85); }
+        button.cloud-btn { background: linear-gradient(135deg, var(--teal), #0c5a73); box-shadow: 0 8px 18px -10px rgba(15,111,140,0.9); }
+        button.ghost { background: rgba(255,255,255,0.14); box-shadow: none; border: 1px solid rgba(255,255,255,0.28); }
+
+        .emp-list { max-height: 230px; overflow-y: auto; border: 1px solid var(--line-soft); padding: 8px; border-radius: 12px; background: #fbfaf6; margin-bottom: 10px; }
+        .emp-list::-webkit-scrollbar { width: 8px; } .emp-list::-webkit-scrollbar-thumb { background: #d9d2c4; border-radius: 8px; }
+        .emp-item {
+            display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; margin-bottom: 5px;
+            font-size: 14px; font-weight: 500; background: #fff; border-radius: 10px; border: 1px solid var(--line-soft);
+            transition: transform .12s, box-shadow .2s;
+        }
+        .emp-item:hover { transform: translateX(-2px); box-shadow: var(--shadow-sm); }
+
+        /* ===== Brushes ===== */
+        .brush-tool-btn { width: 100%; padding: 12px; margin-bottom: 9px; border: 1.5px dashed var(--line); border-radius: 12px; font-weight: 700; cursor: pointer; text-align: center; transition: all .18s; background: #fff; }
+        .brush-tool-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+        .brush-tool-btn.btn-clear { color: var(--muted); }
+        .brush-tool-btn.btn-clear.active-brush { background: linear-gradient(135deg, #8f9da3, #6c7a80) !important; color: #fff; border-style: solid; border-color: transparent; box-shadow: 0 8px 18px -10px rgba(0,0,0,0.4); }
+        .brush-tool-btn.btn-double { color: var(--amber); border-color: #f0d9a8; background: #fffaf0; }
+        .brush-tool-btn.btn-double.active-brush { background: linear-gradient(135deg, var(--amber), #d98a26) !important; color: #fff; border-style: solid; border-color: transparent; box-shadow: 0 8px 18px -10px rgba(217,138,38,0.7); }
+
+        .plaza-title {
+            background: linear-gradient(120deg, var(--ink), var(--ink-soft)); color: #fff; padding: 11px 18px;
+            margin-top: 20px; border-radius: 14px 14px 0 0; font-family: 'Rubik'; font-size: 16px; font-weight: 700; text-align: right;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .excel-title-area { margin-top: 34px; }
+        .excel-title {
+            background: linear-gradient(120deg, var(--coral), #d9512f); color: #fff; padding: 11px 18px;
+            border-radius: 14px 14px 0 0; font-family: 'Rubik'; font-size: 15px; font-weight: 700; text-align: right;
+        }
+
+        table.shifts-table, table.excel-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 16px; background: #fff; border-radius: 0 0 14px 14px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow-sm); }
+        table.shifts-table th, table.shifts-table td, table.excel-table th, table.excel-table td { border-bottom: 1px solid var(--line-soft); border-left: 1px solid var(--line-soft); padding: 9px 8px; text-align: center; font-size: 14px; }
+        table.shifts-table th:last-child, table.shifts-table td:last-child, table.excel-table th:last-child, table.excel-table td:last-child { border-left: none; }
+        table.shifts-table tr:last-child td, table.excel-table tr:last-child td { border-bottom: none; }
+        table.shifts-table th, table.excel-table th { background: #f3efe6; color: var(--ink-soft); font-family: 'Rubik'; font-weight: 600; letter-spacing: .2px; }
+        table.shifts-table td:first-child { background: #faf7f0; font-family: 'Rubik'; }
+        table.excel-table th.orange-header { background: linear-gradient(135deg, var(--amber), #d98a26); color: #fff; }
+        table.excel-table th.peach-header { background: #f6e2d2; color: var(--ink-soft); }
+
+        .excel-table tbody tr.interactive-row { cursor: pointer; transition: background-color .18s; }
+        .excel-table tbody tr.interactive-row:hover { background-color: #fbf6ee; }
+        .excel-table tbody tr.interactive-row.active-brush-row { background-color: #def0ec !important; box-shadow: inset 0 0 0 2px var(--emerald); }
+        .excel-table tbody tr.interactive-row.active-brush-row td.name-cell { background: linear-gradient(135deg, var(--emerald), var(--teal)) !important; color: #fff !important; }
+        .excel-table .total-row td { background: #f3efe6; font-family: 'Rubik'; font-weight: 700; }
+
+        table.shifts-table td select { font-weight: 600; cursor: pointer; transition: background-color .18s; border-radius: 8px; padding: 7px 6px; border: 1px solid transparent; }
+        table.shifts-table td select:hover { border-color: var(--line); }
+        table.shifts-table td { padding: 5px; }
+        table.shifts-table td:hover { background-color: #f7f4ed; }
+
+        select.alert-cell { background-color: #ffe2dc !important; border-color: var(--coral) !important; color: #9a2b16 !important; font-weight: 700; box-shadow: 0 0 0 2px rgba(232,101,75,0.5); }
+
+        #alertsPanel { background: linear-gradient(135deg, #fff4f1, #ffeae4); border: 1px solid #f6c9bd; border-right: 5px solid var(--coral); padding: 16px 18px; border-radius: 14px; margin-bottom: 20px; display: none; box-shadow: var(--shadow-sm); }
+        #alertsPanel strong { color: #b23a22; font-family: 'Rubik'; }
+        #alertsPanel ul { margin: 8px 0 0; padding-right: 22px; color: #9a3320; line-height: 1.75; font-size: 14px; }
+
+        .image-header { display: none; text-align: center; font-family: 'Rubik'; font-size: 22px; font-weight: 800; margin-bottom: 18px; color: var(--ink); border-bottom: 3px solid var(--emerald); padding-bottom: 8px; }
+
+        .badge-count { display: inline-block; min-width: 26px; padding: 3px 9px; border-radius: 999px; color: #fff; font-size: 12.5px; font-weight: 700; }
+        .badge-orange { background: linear-gradient(135deg, var(--amber), #d98a26); }
+        .badge-green { background: linear-gradient(135deg, var(--emerald), var(--emerald-deep)); }
+        .badge-red { background: linear-gradient(135deg, #ef6a52, var(--coral)); }
+        .badge-count.secondary { background: linear-gradient(135deg, #6c7a80, #4d5a60); }
+
+        .color-span { display: block; width: 100%; height: 100%; padding: 6px 0; border-radius: 8px; color: #111; font-weight: 600; }
+
+        /* ===== Settings modal ===== */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(12,31,43,0.55); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 999; padding: 20px; }
+        .modal-overlay.open { display: flex; animation: fadein .2s ease; }
+        @keyframes fadein { from {opacity:0;} to {opacity:1;} }
+        .modal-card { width: 100%; max-width: 520px; background: var(--card); border-radius: 22px; box-shadow: 0 40px 90px -30px rgba(12,31,43,0.7); overflow: hidden; animation: pop .25s cubic-bezier(.2,.9,.3,1.2); }
+        @keyframes pop { from {transform: translateY(14px) scale(.97); opacity:0;} to {transform: none; opacity:1;} }
+        .modal-head { background: linear-gradient(120deg, var(--ink), var(--teal)); color: #fff; padding: 20px 24px; }
+        .modal-head h2 { color: #fff; text-align: right; margin: 0; font-family: 'Rubik'; font-size: 19px; }
+        .modal-head p { margin: 4px 0 0; color: #bcd6d1; font-size: 13px; }
+        .modal-body { padding: 22px 24px; }
+        .modal-body label { display: block; font-weight: 600; font-size: 13.5px; margin: 14px 0 6px; color: var(--ink-soft); }
+        .modal-body label:first-child { margin-top: 0; }
+        .modal-hint { font-size: 12px; color: var(--muted); margin-top: 16px; line-height: 1.6; background: #faf7f0; padding: 12px; border-radius: 10px; border: 1px solid var(--line-soft); }
+        .modal-foot { display: flex; gap: 10px; justify-content: flex-start; padding: 0 24px 22px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <div class="app-header">
+        <div class="brand">
+            <div class="brand-mark">MWM</div>
+            <div class="brand-text">
+                <h1>מערכת ניהול משמרות</h1>
+                <p>פלאזת קריות · פלאזת חוף הכרמל</p>
+            </div>
+        </div>
+        <div class="header-status">
+            <span id="cloudPill" class="cloud-pill"><span class="dot"></span><span id="cloudPillText">ענן לא מוגדר</span></span>
+            <button class="ghost" onclick="openCloudSettings()" style="padding:8px 14px;">⚙️ הגדרות ענן</button>
+        </div>
+    </div>
+
+    
+    <div class="week-selector" id="weekSelectorArea">
+        <label for="currentWeek"><strong>שבוע עבודה פעיל:</strong></label>
+        <select id="currentWeek" onchange="switchWeek()"></select>
+        <button class="secondary" onclick="addNewWeek()">+ הוסף שבוע חדש</button>
+        
+        <button class="backup-btn" onclick="exportBackup()">גבה נתונים לקובץ 💾</button>
+        <button class="backup-btn" onclick="document.getElementById('importFileInput').click()">שחזר מגיבוי 📂</button>
+        <input type="file" id="importFileInput" style="display:none;" accept=".json" onchange="importBackup(event)">
+
+        <button class="cloud-btn" onclick="syncNow()">☁️ שמור לענן</button>
+        <button class="cloud-btn" onclick="loadFromCloud()">⬇️ טען מהענן</button>
+        <button style="margin-right: auto; background-color: #27ae60;" onclick="downloadImage()">הורד סידור כתמונה 📸</button>
+    </div>
+
+    <div id="alertsPanel">
+        <strong style="color: #c53030;">⚠️ נמצאו חריגות בסידור העבודה בשבוע זה:</strong>
+        <ul id="alertsList"></ul>
+    </div>
+
+    <div class="flex-container">
+        
+        <div class="sidebar" id="sidebarArea">
+            <div class="section">
+                <h3>👥 ניהול עובדים</h3>
+                <div class="input-group">
+                    <input type="text" id="empNameInput" placeholder="שם עובד חדש...">
+                    <button onclick="addEmployee()">הוסף</button>
+                </div>
+                <div class="emp-list" id="employeesContainer"></div>
+            </div>
+
+            <div class="section">
+                <h3>🖌️ מברשות שיבוץ מיוחדות</h3>
+                <div id="brushClearBtn" class="brush-tool-btn btn-clear" onclick="setSpecialBrush('CLEAR', this)">❌ מחיקה / פנה תא</div>
+                <div id="brushDoubleBtn" class="brush-tool-btn btn-double" onclick="setSpecialBrush('כפולה', this)">🔄 מברשת כפולה 12/12</div>
+                <p style="font-size: 11px; color: #7f8c8d; margin: 5px 0 0 0; text-align: center;">ניתן גם ללחוץ על שם עובד בטבלה למטה כדי לצבוע איתו!</p>
+            </div>
+            
+            <div class="section">
+                <h3>📝 הוספת אילוץ / חופש</h3>
+                <div class="input-group">
+                    <select id="constraintEmpSelect"><option value="">- בחר עובד -</option></select>
+                </div>
+                <div class="input-group">
+                    <select id="constraintDaySelect">
+                        <option value="0">יום ראשון</option>
+                        <option value="1">יום שני</option>
+                        <option value="2">יום שלישי</option>
+                        <option value="3">יום רביעי</option>
+                        <option value="4">יום חמישי</option>
+                        <option value="5">יום שישי</option>
+                        <option value="6">יום שבת</option>
+                    </select>
+                    <select id="constraintTypeSelect">
+                        <option value="חופש">חופש</option>
+                        <option value="בוקר">בוקר</option>
+                        <option value="צהריים">צהריים</option>
+                        <option value="לילה">לילה</option>
+                        <option value="מחק_אילוץ">נקה אילוץ</option>
+                    </select>
+                </div>
+                <button style="width:100%;" onclick="addConstraint()">עדכן לוח אילוצים 💾</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div id="captureArea" style="padding: 15px; background: white; border-radius: 8px;">
+                <div class="image-header" id="renderedHeader">סידור עבודה שבועי</div>
+                
+                <div class="plaza-title">📍 פלאזת קריות</div>
+                <table class="shifts-table" id="table-krayot">
+                    <thead>
+                        <tr>
+                            <th style="width: 10%;">משמרת</th>
+                            <th>ראשון</th>
+                            <th>שני</th>
+                            <th>שלישי</th>
+                            <th>רביעי</th>
+                            <th>חמישי</th>
+                            <th>שישי</th>
+                            <th>שבת</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr data-shift="בוקר"><td><strong>בוקר</strong></td></tr>
+                        <tr data-shift="צהריים"><td><strong>צהריים</strong></td></tr>
+                        <tr data-shift="לילה"><td><strong>לילה</strong></td></tr>
+                    </tbody>
+                </table>
+
+                <div class="plaza-title">📍 פלאזת חוף הכרמל</div>
+                <table class="shifts-table" id="table-coast">
+                    <thead>
+                        <tr>
+                            <th style="width: 10%;">משמרת</th>
+                            <th>ראשון</th>
+                            <th>שני</th>
+                            <th>שלישי</th>
+                            <th>רביעי</th>
+                            <th>חמישי</th>
+                            <th>שישי</th>
+                            <th>שבת</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr data-shift="בוקר"><td><strong>בוקר</strong></td></tr>
+                        <tr data-shift="צהריים"><td><strong>צהריים</strong></td></tr>
+                        <tr data-shift="לילה"><td><strong>לילה</strong></td></tr>
+                    </tbody>
+                </table>
+
+                <div id="excelLiveContainer" class="excel-title-area">
+                    <div class="excel-title">📊 מבט על: לוח אילוצים וספירת כפולות (לחץ על שם עובד לשיבוץ מהיר)</div>
+                    <table class="excel-table" id="excelLiveTable">
+                        <thead>
+                            <tr>
+                                <th class="peach-header">שם העובד</th>
+                                <th class="orange-header">סה"כ משמרות</th>
+                                <th style="background-color: #9b59b6; color: white;">כפולות 12/12 💼</th>
+                                <th>ראשון</th>
+                                <th>שני</th>
+                                <th>שלישי</th>
+                                <th>רביעי</th>
+                                <th>חמישי</th>
+                                <th>שישי</th>
+                                <th>שבת</th>
+                            </tr>
+                        </thead>
+                        <tbody id="excelLiveBody">
+                            </tbody>
+                    </table>
+                </div>
+
+            </div>
+        </div>
+        
+    </div>
+</div>
+
+<script>
+    let defaultEmployees = ["מייס סואעד", "עדן סמרי", "מרים חליל", "מייק חנא", "אסאלה קרעאוי", "חיזראן פואז", "גואנה גנאים", "איה עאסלה", "אסאלה + מריים"];
+    let globalEmployees = JSON.parse(localStorage.getItem('globalEmployees')) || defaultEmployees;
+    
+    const employeeColors = {
+        "מייס סואעד": "#d4efdf", "עדן סמרי": "#d6eaf8", "מרים חליל": "#fadbd8",
+        "מייק חנא": "#e8daef", "אסאלה קרעאוי": "#fdebd0", "חיזראן פואז": "#e5e8e8",
+        "גואנה גנאים": "#d1f2eb", "איה עאסלה": "#f9e79f", "אסאלה + מריים": "#f5b7b1"
+    };
+    const defaultColors = ["#eaf2f8", "#f5eef8", "#fef9e7", "#ebf5fb", "#e8f8f5"];
+
+    let defaultWeeksData = {
+        "שבוע_17_מאי_2026": { label: "יום ראשון, 17 מאי 2026 - שבת, 23 מאי 2026", shifts: {}, constraints: {} },
+        "שבוע_24_מאי_2026": { label: "יום ראשון, 24 מאי 2026 - שבת, 30 מאי 2026", shifts: {}, constraints: {} }
+    };
+    let weeksData = JSON.parse(localStorage.getItem('weeksData')) || defaultWeeksData;
+
+    const daysOfWeek = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+    const plazas = ["krayot", "coast"];
+    const shiftTypes = ["בוקר", "צהריים", "לילה"];
+
+    // משתנה הגלובלי של המברשת הפעילה לשיבוץ בלחיצה
+    let activeBrushValue = ""; 
+
+    window.onload = function() {
+        initWeekSelector();
+        initTables();
+        renderEmployeeList();
+        switchWeek();
+    };
+
+    function initWeekSelector() {
+        let selector = document.getElementById('currentWeek');
+        selector.innerHTML = "";
+        for (let key in weeksData) {
+            let opt = document.createElement('option');
+            opt.value = key;
+            opt.text = weeksData[key].label || key.replace(/_/g, " ");
+            selector.appendChild(opt);
+        }
+        let lastWeek = localStorage.getItem('lastSelectedWeek');
+        if (lastWeek && weeksData[lastWeek]) {
+            selector.value = lastWeek;
+        }
+    }
+
+    function initTables() {
+        plazas.forEach(plaza => {
+            shiftTypes.forEach(shift => {
+                let row = document.querySelector(`#table-${plaza} tr[data-shift='${shift}']`);
+                for (let d = 0; d < 7; d++) {
+                    let td = document.createElement('td');
+                    let select = document.createElement('select');
+                    select.dataset.plaza = plaza; select.dataset.shift = shift; select.dataset.day = d;
+                    
+                    select.addEventListener('change', function() {
+                        applySelectColor(this);
+                        saveCurrentShiftsAndValidate();
+                    });
+
+                    // שיבוץ מהיר בלחיצה על התא באמצעות המברשת שנבחרה מהטבלה למטה
+                    select.addEventListener('mousedown', function(e) {
+                        if (activeBrushValue !== "") {
+                            e.preventDefault(); // מונע פתיחה של התפריט
+                            
+                            if (activeBrushValue === "CLEAR") {
+                                this.value = "";
+                            } else {
+                                if (activeBrushValue === "כפולה" && this.dataset.shift !== "צהריים") {
+                                    alert("ניתן לסמן כפולה 12/12 רק במשמרות צהריים!");
+                                    return;
+                                }
+                                this.value = activeBrushValue;
+                            }
+                            
+                            applySelectColor(this);
+                            saveCurrentShiftsAndValidate();
+                        }
+                    });
+
+                    td.appendChild(select);
+                    row.appendChild(td);
+                }
+            });
+        });
+    }
+
+    function applySelectColor(selectElement) {
+        let val = selectElement.value;
+        if(val === "כפולה") {
+            selectElement.style.backgroundColor = "#ebdef0"; 
+            selectElement.style.color = "#5b2c6f";
+        } else {
+            selectElement.style.color = "#333";
+            selectElement.style.backgroundColor = (val && employeeColors[val]) ? employeeColors[val] : "#ffffff";
+        }
+    }
+
+    // פונקציה לניהול מצב המברשת מהטבלה התחתונה או מסרגל הצד
+    function selectEmployeeBrush(empName) {
+        // ניקוי סימונים קודמים מסרגל הצד ומכל השורות
+        document.querySelectorAll('.brush-tool-btn').forEach(b => b.classList.remove('active-brush'));
+        let previousActiveRow = document.querySelector('.interactive-row.active-brush-row');
+        if(previousActiveRow) previousActiveRow.classList.remove('active-brush-row');
+
+        if (activeBrushValue === empName) {
+            activeBrushValue = ""; // לחיצה חוזרת מבטלת
+        } else {
+            activeBrushValue = empName;
+            // אם זה עובד רגיל, נסמן את השורה שלו בטבלה
+            let rows = document.querySelectorAll('.interactive-row');
+            rows.forEach(row => {
+                if(row.dataset.empName === empName) {
+                    row.classList.add('active-brush-row');
+                }
+            });
+        }
+    }
+
+    function setSpecialBrush(type, element) {
+        let previousActiveRow = document.querySelector('.interactive-row.active-brush-row');
+        if(previousActiveRow) previousActiveRow.classList.remove('active-brush-row');
+        document.querySelectorAll('.brush-tool-btn').forEach(b => b.classList.remove('active-brush'));
+
+        if (activeBrushValue === type) {
+            activeBrushValue = "";
+        } else {
+            activeBrushValue = type;
+            element.classList.add('active-brush');
+        }
+    }
+
+    function renderEmployeeList() {
+        let container = document.getElementById('employeesContainer');
+        container.innerHTML = "";
+        globalEmployees.forEach(emp => {
+            let color = employeeColors[emp] || "#fff";
+            let div = document.createElement('div');
+            div.className = 'emp-item';
+            div.style.borderRight = `5px solid ${color}`;
+            div.style.paddingRight = "5px";
+            div.innerHTML = `<span>${emp}</span> <button class="danger" onclick="removeEmployee('${emp}')">מחק</button>`;
+            container.appendChild(div);
+        });
+
+        let conSelect = document.getElementById('constraintEmpSelect');
+        conSelect.innerHTML = '<option value="">- בחר עובד -</option>';
+        globalEmployees.forEach(emp => {
+            let opt = document.createElement('option');
+            opt.value = emp; opt.text = emp;
+            conSelect.appendChild(opt);
+        });
+
+        let allSelects = document.querySelectorAll('table.shifts-table select');
+        allSelects.forEach(select => {
+            let currVal = select.value;
+            select.innerHTML = '<option value="">- פנוי -</option>';
+            globalEmployees.forEach(emp => {
+                let opt = document.createElement('option');
+                opt.value = emp; opt.text = emp;
+                select.appendChild(opt);
+            });
+
+            if(select.dataset.shift === 'צהריים') {
+                let optKfula = document.createElement('option');
+                optKfula.value = "כפולה"; optKfula.text = "🔄 12/12";
+                select.appendChild(optKfula);
+            }
+
+            select.value = currVal;
+            applySelectColor(select);
+        });
+    }
+
+    function addEmployee() {
+        let name = document.getElementById('empNameInput').value.trim();
+        if(name && !globalEmployees.includes(name)) {
+            globalEmployees.push(name);
+            if(!employeeColors[name]) {
+                employeeColors[name] = defaultColors[globalEmployees.length % defaultColors.length];
+            }
+            document.getElementById('empNameInput').value = "";
+            localStorage.setItem('globalEmployees', JSON.stringify(globalEmployees));
+            renderEmployeeList();
+            saveCurrentShiftsAndValidate();
+        }
+    }
+
+    function removeEmployee(name) {
+        if(confirm(`האם למחוק את העובד ${name}?`)) {
+            globalEmployees = globalEmployees.filter(e => e !== name);
+            if(activeBrushValue === name) activeBrushValue = "";
+            localStorage.setItem('globalEmployees', JSON.stringify(globalEmployees));
+            renderEmployeeList();
+            saveCurrentShiftsAndValidate();
+        }
+    }
+
+    function addNewWeek() {
+        let weekName = prompt("הכנס שם או תאריך לשבוע החדש (לדוגמה: 31 מאי 2026):");
+        if(weekName && weekName.trim()) {
+            let key = "שבוע_" + weekName.trim().replace(/ /g, "_");
+            if(!weeksData[key]) {
+                weeksData[key] = { label: "שבוע " + weekName, shifts: {}, constraints: {} };
+                localStorage.setItem('weeksData', JSON.stringify(weeksData));
+                initWeekSelector();
+                document.getElementById('currentWeek').value = key;
+                switchWeek();
+            }
+        }
+    }
+
+    function switchWeek() {
+        let currentWeekKey = document.getElementById('currentWeek').value;
+        if (!currentWeekKey) return;
+        localStorage.setItem('lastSelectedWeek', currentWeekKey);
+
+        if(!weeksData[currentWeekKey]) {
+            weeksData[currentWeekKey] = { label: currentWeekKey.replace(/_/g, " "), shifts: {}, constraints: {} };
+        }
+
+        let data = weeksData[currentWeekKey];
+        let allSelects = document.querySelectorAll('table.shifts-table select');
+        allSelects.forEach(select => {
+            let id = `${select.dataset.plaza}_${select.dataset.shift}_${select.dataset.day}`;
+            select.value = data.shifts[id] || "";
+            applySelectColor(select);
+        });
+
+        runValidationEngine();
+    }
+
+    function saveCurrentShiftsAndValidate() {
+        let currentWeekKey = document.getElementById('currentWeek').value;
+        let allSelects = document.querySelectorAll('table.shifts-table select');
+        
+        allSelects.forEach(select => {
+            let id = `${select.dataset.plaza}_${select.dataset.shift}_${select.dataset.day}`;
+            weeksData[currentWeekKey].shifts[id] = select.value;
+        });
+
+        localStorage.setItem('weeksData', JSON.stringify(weeksData));
+        runValidationEngine();
+    }
+
+    function addConstraint() {
+        let currentWeekKey = document.getElementById('currentWeek').value;
+        let emp = document.getElementById('constraintEmpSelect').value;
+        let day = document.getElementById('constraintDaySelect').value;
+        let type = document.getElementById('constraintTypeSelect').value;
+
+        if(!emp) { alert("אנא בחר עובד."); return; }
+        if(!weeksData[currentWeekKey].constraints[emp]) weeksData[currentWeekKey].constraints[emp] = {};
+
+        if(type === "מחק_אילוץ") {
+            delete weeksData[currentWeekKey].constraints[emp][day];
+        } else {
+            weeksData[currentWeekKey].constraints[emp][day] = type;
+        }
+        
+        localStorage.setItem('weeksData', JSON.stringify(weeksData));
+        runValidationEngine();
+    }
+
+    function getSubEmployees(name) {
+        if (!name) return [];
+        return name.includes('+') ? name.split('+').map(n => n.trim()) : [name];
+    }
+
+    function findGlobalEmployee(subName) {
+        let cleanSub = subName.replace(/י+/g, 'י').replace(/ו+/g, 'ו').trim();
+        return globalEmployees.find(e => {
+            let cleanE = e.replace(/י+/g, 'י').replace(/ו+/g, 'ו');
+            return cleanE.includes(cleanSub) && e !== "אסאלה + מריים";
+        });
+    }
+
+    function incrementEmployeeCount(counterObj, rawEmp) {
+        if (!rawEmp || rawEmp === "כפולה") return;
+        if (counterObj[rawEmp] !== undefined) counterObj[rawEmp]++;
+        
+        let subs = getSubEmployees(rawEmp);
+        if (subs.length > 1) {
+            subs.forEach(sub => {
+                let matched = findGlobalEmployee(sub);
+                if (matched && counterObj[matched] !== undefined) counterObj[matched]++;
+            });
+        }
+    }
+
+    function getPreviousWeekKey(currentKey) {
+        let keys = Object.keys(weeksData);
+        let currentIndex = keys.indexOf(currentKey);
+        if (currentIndex > 0) {
+            return keys[currentIndex - 1];
+        }
+        return null;
+    }
+
+    function runValidationEngine() {
+        let currentWeekKey = document.getElementById('currentWeek').value;
+        if (!currentWeekKey) return;
+        let allSelects = document.querySelectorAll('table.shifts-table select');
+        let alerts = [];
+        
+        let shiftCounts = {};
+        let doubleCounts = {};
+        globalEmployees.forEach(e => { shiftCounts[e] = 0; doubleCounts[e] = 0; });
+        
+        let dayMaps = [{}, {}, {}, {}, {}, {}, {}];
+
+        allSelects.forEach(s => { s.classList.remove('alert-cell'); applySelectColor(s); });
+
+        allSelects.forEach(select => {
+            let rawEmp = select.value;
+            if(!rawEmp || rawEmp === "כפולה") return;
+            
+            let dayIdx = parseInt(select.dataset.day);
+            let shift = select.dataset.shift;
+            let plaza = select.dataset.plaza;
+
+            incrementEmployeeCount(shiftCounts, rawEmp);
+
+            let subs = getSubEmployees(rawEmp);
+            subs.forEach(sub => {
+                let empKey = rawEmp;
+                if (subs.length > 1) {
+                    let matched = findGlobalEmployee(sub);
+                    if (matched) empKey = matched;
+                }
+                if (!dayMaps[dayIdx][empKey]) dayMaps[dayIdx][empKey] = [];
+                dayMaps[dayIdx][empKey].push({ plaza, shift, select, rawEmp });
+            });
+        });
+
+        plazas.forEach(plaza => {
+            for(let d=0; d<7; d++) {
+                let midSelect = document.querySelector(`table.shifts-table select[data-plaza='${plaza}'][data-shift='צהריים'][data-day='${d}']`);
+                if(!midSelect) continue;
+                let midVal = midSelect.value;
+                if(midVal !== "כפולה") continue;
+
+                let morningSelect = document.querySelector(`table.shifts-table select[data-plaza='${plaza}'][data-shift='בוקר'][data-day='${d}']`);
+                let nightSelect = document.querySelector(`table.shifts-table select[data-plaza='${plaza}'][data-shift='לילה'][data-day='${d}']`);
+                
+                let morningEmp = morningSelect ? morningSelect.value : "";
+                let nightEmp = nightSelect ? nightSelect.value : "";
+
+                if(morningEmp) incrementEmployeeCount(doubleCounts, morningEmp);
+                if(nightEmp) incrementEmployeeCount(doubleCounts, nightEmp);
+            }
+        });
+
+        let prevWeekKey = getPreviousWeekKey(currentWeekKey);
+        let prevWeekShifts = (prevWeekKey && weeksData[prevWeekKey]) ? weeksData[prevWeekKey].shifts : null;
+
+        if (prevWeekShifts) {
+            let prevSatNightEmps = [];
+            plazas.forEach(plz => {
+                let id = `${plz}_לילה_6`;
+                let rawVal = prevWeekShifts[id];
+                if (rawVal && rawVal !== "כפולה") {
+                    prevSatNightEmps = prevSatNightEmps.concat(getSubEmployees(rawVal));
+                }
+            });
+
+            plazas.forEach(plz => {
+                let sunMorningSelect = document.querySelector(`table.shifts-table select[data-plaza='${plz}'][data-shift='בוקר'][data-day='0']`);
+                if (sunMorningSelect && sunMorningSelect.value) {
+                    let currentSubs = getSubEmployees(sunMorningSelect.value);
+                    let exactConflictEmps = currentSubs.filter(e => {
+                        let cleanE = e.replace(/י+/g, 'י').replace(/ו+/g, 'ו');
+                        return prevSatNightEmps.some(prevE => {
+                            let cleanPrev = prevE.replace(/י+/g, 'י').replace(/ו+/g, 'ו');
+                            return cleanPrev.includes(cleanE) || cleanE.includes(cleanPrev);
+                        });
+                    });
+
+                    if (exactConflictEmps.length > 0) {
+                        sunMorningSelect.classList.add('alert-cell');
+                        alerts.push(`⚠️ מנוחת לילה חסרה משבוע שעבר! העובדים [${exactConflictEmps.join(', ')}] עבדו בלילה במוצ"ש האחרון ושובצו בבוקר יום ראשון.`);
+                    }
+                }
+            });
+        }
+
+        globalEmployees.forEach(emp => {
+            if (emp.includes('+')) return;
+
+            let prevConsecutiveDays = 0;
+            if (prevWeekShifts) {
+                for (let d = 6; d >= 0; d--) {
+                    let workedInDay = false;
+                    plazas.forEach(plz => {
+                        shiftTypes.forEach(shf => {
+                            let rawVal = prevWeekShifts[`${plz}_${shf}_${d}`];
+                            if (rawVal && rawVal !== "כפולה") {
+                                let subs = getSubEmployees(rawVal).map(s => {
+                                    let m = findGlobalEmployee(s);
+                                    return m ? m : s;
+                                });
+                                if (subs.includes(emp)) workedInDay = true;
+                            }
+                        });
+                    });
+                    if (workedInDay) prevConsecutiveDays++;
+                    else break;
+                }
+            }
+
+            let currentConsecutiveDays = 0;
+            let currentSequenceArray = [];
+            
+            for (let d = 0; d < 7; d++) {
+                let workedInCurrentDay = false;
+                let daySelects = [];
+                
+                plazas.forEach(plz => {
+                    shiftTypes.forEach(shf => {
+                        let sel = document.querySelector(`table.shifts-table select[data-plaza='${plz}'][data-shift='${shf}'][data-day='${d}']`);
+                        if (sel && sel.value && sel.value !== "כפולה") {
+                            let subs = getSubEmployees(sel.value).map(s => {
+                                let m = findGlobalEmployee(s);
+                                return m ? m : s;
+                            });
+                            if (subs.includes(emp)) {
+                                workedInCurrentDay = true;
+                                daySelects.push(sel);
+                            }
+                        }
+                    });
+                });
+
+                if (workedInCurrentDay) {
+                    currentConsecutiveDays++;
+                    currentSequenceArray = currentSequenceArray.concat(daySelects);
+                    
+                    let totalSequence = prevConsecutiveDays + currentConsecutiveDays;
+                    if (totalSequence > 6) {
+                        currentSequenceArray.forEach(s => s.classList.add('alert-cell'));
+                        let msg = `❌ חריגת רצף עבודה: ${emp} משובץ ל-${totalSequence} ימי עבודה רצופים (החל משבוע שעבר, מקסימום מותר: 6)`;
+                        if (!alerts.includes(msg)) alerts.push(msg);
+                    }
+                } else {
+                    break;
+                }
+            }
+        });
+
+        for (let d = 0; d < 7; d++) {
+            let dayName = daysOfWeek[d];
+            let empsInDay = dayMaps[d];
+            
+            for (let emp in empsInDay) {
+                let assignments = empsInDay[emp];
+                if (assignments.length > 1) {
+                    let shiftsSeen = {};
+                    let hasConflict = false;
+                    
+                    assignments.forEach(ast => {
+                        if (shiftsSeen[ast.shift]) {
+                            hasConflict = true;
+                            ast.select.classList.add('alert-cell');
+                            shiftsSeen[ast.shift].select.classList.add('alert-cell');
+                        } else {
+                            shiftsSeen[ast.shift] = ast;
+                        }
+                    });
+                    
+                    if (hasConflict) {
+                        let msg = `❌ התנגשות פיזית: ${emp} משובץ באותה משמרת במספר פלאזות במקביל ביום ${dayName}`;
+                        if (!alerts.includes(msg)) alerts.push(msg);
+                    }
+                }
+            }
+        }
+
+        allSelects.forEach(currentSelect => {
+            let rawEmp = currentSelect.value; 
+            if(!rawEmp || rawEmp === "כפולה") return;
+            
+            let dayIdx = parseInt(currentSelect.dataset.day);
+            let currentShift = currentSelect.dataset.shift;
+            let plazaHeb = currentSelect.dataset.plaza === 'krayot' ? 'קריות' : 'חוף הכרמל';
+            let dayName = daysOfWeek[dayIdx];
+
+            if(currentShift === 'בוקר' && dayIdx > 0) {
+                let yesterdayNightAll = document.querySelectorAll(`table.shifts-table select[data-day='${dayIdx-1}'][data-shift='לילה']`);
+                yesterdayNightAll.forEach(nightSelect => {
+                    let nightRawEmp = nightSelect.value; if(!nightRawEmp) return;
+
+                    let currentSubList = getSubEmployees(rawEmp);
+                    let nightSubList = getSubEmployees(nightRawEmp);
+                    if(currentSubList.some(empName => nightSubList.includes(empName))) {
+                        currentSelect.classList.add('alert-cell'); nightSelect.classList.add('alert-cell');
+                        if (!alerts.includes(`⚠️ מנוחת לילה חסרה! עובד בלילה ביום ${daysOfWeek[dayIdx-1]} ובוקר למחרת ביום ${dayName}`)) {
+                            alerts.push(`⚠️ מנוחת לילה חסרה! עובד בלילה ביום ${daysOfWeek[dayIdx-1]} ובוקר למחרת ביום ${dayName}`);
+                        }
+                    }
+                });
+            }
+
+            let weekConstraints = weeksData[currentWeekKey].constraints;
+            let currentSubList = getSubEmployees(rawEmp);
+            currentSubList.forEach(emp => {
+                if(weekConstraints[emp] && weekConstraints[emp][dayIdx]) {
+                    let rule = weekConstraints[emp][dayIdx];
+                    if(rule === "חופש") {
+                        currentSelect.classList.add('alert-cell');
+                        alerts.push(`ניגוד אילוצים: ${emp} ביקש חופש ביום ${dayName} אך שובץ ב${plazaHeb}`);
+                    } else if(rule !== currentShift) {
+                        currentSelect.classList.add('alert-cell');
+                        alerts.push(`ניגוד אילוצים: ${emp} ביקש רק משמרת [${rule}] ביום ${dayName} אך שובץ ב${plazaHeb}`);
+                    }
+                }
+            });
+        });
+
+        buildExcelLiveUI(shiftCounts, doubleCounts);
+
+        for (let emp in shiftCounts) {
+            if(emp.includes('+')) continue; 
+            let count = shiftCounts[emp];
+            if(count > 6) alerts.push(`❌ חריגת משמרות: ${emp} משובץ ל-${count} משמרות (מקסימום מותר: 6).`);
+            else if (count < 5 && count > 0) alerts.push(`⚠️ תשומת לב: ל${emp} יש כרגע פחות מהמינימום (${count} משמרות).`);
+        }
+
+        let panel = document.getElementById('alertsPanel');
+        let list = document.getElementById('alertsList');
+        list.innerHTML = "";
+        if(alerts.length > 0) {
+            panel.style.display = 'block';
+            alerts.forEach(m => { let li = document.createElement('li'); li.innerHTML = m; list.appendChild(li); });
+        } else { panel.style.display = 'none'; }
+    }
+
+    function buildExcelLiveUI(shiftCounts, doubleCounts) {
+        let currentWeekKey = document.getElementById('currentWeek').value;
+        let body = document.getElementById('excelLiveBody'); body.innerHTML = "";
+        let weekConstraints = weeksData[currentWeekKey].constraints;
+
+        globalEmployees.forEach(emp => {
+            let tr = document.createElement('tr');
+            tr.className = 'interactive-row';
+            tr.dataset.empName = emp;
+            
+            // הוספת אירוע לחיצה לשורה כדי לבחור את העובד כמברשת
+            tr.addEventListener('click', function() {
+                selectEmployeeBrush(emp);
+            });
+
+            // אם השורה שנבנית היא כרגע המברשת הפעילה, נצבע אותה מיד
+            if(activeBrushValue === emp) {
+                tr.classList.add('active-brush-row');
+            }
+
+            let empColor = employeeColors[emp] || "#ffffff";
+            let nameTd = document.createElement('td'); nameTd.className = 'name-cell'; nameTd.style.backgroundColor = empColor; nameTd.innerText = emp; tr.appendChild(nameTd);
+            
+            let countTd = document.createElement('td'); countTd.className = 'count-cell';
+            let count = shiftCounts[emp] || 0;
+            let badgeClass = "badge-orange";
+            if(!emp.includes('+')) {
+                if(count === 5 || count === 6) badgeClass = "badge-green";
+                if(count > 6) badgeClass = "badge-red";
+            } else { badgeClass = "secondary"; }
+            countTd.innerHTML = `<span class="badge-count ${badgeClass}">${count}</span>`; tr.appendChild(countTd);
+            
+            let doubleTd = document.createElement('td');
+            doubleTd.style.fontWeight = 'bold';
+            let dCount = doubleCounts[emp] || 0;
+            doubleTd.innerHTML = dCount > 0 ? `<span class="badge-count" style="background-color: #8e44ad; color: white;">${dCount}</span>` : `<span style="color: #ccc;">0</span>`;
+            tr.appendChild(doubleTd);
+            
+            for(let d = 0; d < 7; d++) {
+                let dayTd = document.createElement('td');
+                let dayConstraint = (weekConstraints[emp] && weekConstraints[emp][d]) ? weekConstraints[emp][d] : "";
+                if(dayConstraint) {
+                    dayTd.style.backgroundColor = empColor;
+                    dayTd.innerHTML = dayConstraint === "חופש" ? `<strong style="color: #c0392b; background: rgba(255,255,255,0.6); padding: 2px 4px; border-radius:3px;">חופש</strong>` : `<span style="color: #1b4f72; font-weight:bold; background: rgba(255,255,255,0.6); padding: 2px 4px; border-radius:3px;">${dayConstraint}</span>`;
+                } else { dayTd.innerText = ""; dayTd.style.backgroundColor = "#ffffff"; }
+                tr.appendChild(dayTd);
+            }
+            body.appendChild(tr);
+        });
+
+        let totalTr = document.createElement('tr'); totalTr.className = 'total-row';
+        totalTr.innerHTML = `<td class="name-cell" style="text-align:center;">סה"כ</td><td style="text-align:center; background-color:#f5cba7;">${globalEmployees.length} עובדים</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>`;
+        body.appendChild(totalTr);
+    }
+
+    function exportBackup() {
+        let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+            globalEmployees: globalEmployees,
+            weeksData: weeksData
+        }));
+        let downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", "גיבוי_מערכת_משמרות.json");
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+    }
+
+    function importBackup(event) {
+        let input = event.target;
+        let reader = new FileReader();
+        reader.onload = function(){
+            try {
+                let imported = JSON.parse(reader.result);
+                if(imported.globalEmployees && imported.weeksData) {
+                    globalEmployees = imported.globalEmployees;
+                    weeksData = imported.weeksData;
+                    localStorage.setItem('globalEmployees', JSON.stringify(globalEmployees));
+                    localStorage.setItem('weeksData', JSON.stringify(weeksData));
+                    initWeekSelector();
+                    renderEmployeeList();
+                    switchWeek();
+                    alert("הנתונים שוחזרו בהצלחה מהקובץ! 🎉");
+                } else { alert("קובץ גיבוי לא תקין."); }
+            } catch (e) { alert("שגיאה בקריאת הקובץ."); }
+        };
+        if(input.files[0]) reader.readAsText(input.files[0]);
+    }
+
+    function downloadImage() {
+        let currentWeekKey = document.getElementById('currentWeek').value;
+        let selector = document.getElementById('currentWeek');
+        let selectedWeekText = selector.options[selector.selectedIndex] ? selector.options[selector.selectedIndex].text : "";
+
+        document.getElementById('sidebarArea').style.display = 'none';
+        document.getElementById('weekSelectorArea').style.display = 'none';
+        document.getElementById('alertsPanel').style.display = 'none';
+        document.getElementById('excelLiveContainer').style.display = 'none';
+        
+        let header = document.getElementById('renderedHeader');
+        header.innerText = "סידור עבודה שבועי: " + selectedWeekText;
+        header.style.display = 'block';
+
+        let selects = document.querySelectorAll('table.shifts-table select');
+        selects.forEach(select => {
+            let span = document.createElement('span');
+            let val = select.value;
+            
+            let displayNames = {
+                "כפולה": "🔄 12/12"
+            };
+
+            span.innerText = displayNames[val] ? displayNames[val] : (val ? val : "-");
+            span.className = 'temp-text color-span';
+            
+            if(val === "כפולה") {
+                span.style.backgroundColor = "#ebdef0";
+                span.style.color = "#5b2c6f";
+                span.style.fontWeight = 'bold';
+            } else if(val && employeeColors[val]) { 
+                span.style.backgroundColor = employeeColors[val]; 
+                span.style.fontWeight = 'bold'; 
+            } else { 
+                span.style.backgroundColor = 'transparent'; 
+            }
+            select.style.display = 'none'; select.parentNode.appendChild(span);
+        });
+
+        html2canvas(document.getElementById("captureArea"), { scale: 2, backgroundColor: "#ffffff" }).then(canvas => {
+            let link = document.createElement('a');
+            link.download = 'סידור_' + currentWeekKey + '.png'; link.href = canvas.toDataURL("image/png"); link.click();
+
+            document.getElementById('sidebarArea').style.display = 'block';
+            document.getElementById('weekSelectorArea').style.display = 'flex';
+            document.getElementById('excelLiveContainer').style.display = 'block';
+            header.style.display = 'none';
+            selects.forEach(select => select.style.display = 'inline-block');
+            document.querySelectorAll('.temp-text').forEach(s => s.remove());
+            runValidationEngine();
+        });
+    }
+</script>
+
+
+<div class="modal-overlay" id="cloudSettingsOverlay">
+    <div class="modal-card">
+        <div class="modal-head">
+            <h2>☁️ חיבור לענן (Supabase)</h2>
+            <p>שמירה אונליין וסנכרון בין מכשירים</p>
+        </div>
+        <div class="modal-body">
+            <label for="sbUrlInput">Project URL</label>
+            <input type="text" id="sbUrlInput" placeholder="https://xxxx.supabase.co">
+            <label for="sbKeyInput">Anon / Public Key</label>
+            <input type="text" id="sbKeyInput" placeholder="eyJhbGciOi...">
+            <label for="sbWorkspaceInput">מזהה סביבת עבודה (workspace)</label>
+            <input type="text" id="sbWorkspaceInput" placeholder="main" value="main">
+            <div class="modal-hint">
+                יש ליצור פעם אחת טבלה בשם <strong>schedule_state</strong> ב-Supabase (קובץ ה-SQL מצורף).<br>
+                המפתחות נשמרים מקומית בדפדפן זה בלבד. ניתן להשתמש באותם פרטים בכל מכשיר כדי לראות את אותו הסידור.
+            </div>
+        </div>
+        <div class="modal-foot">
+            <button class="cloud-btn" onclick="saveCloudSettings()">💾 שמור והתחבר</button>
+            <button class="secondary" onclick="closeCloudSettings()">סגור</button>
+            <button class="danger" style="margin-right:auto;padding:10px 14px;" onclick="disconnectCloud()">נתק ענן</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ===== שכבת ענן Supabase (תוספת בלבד - לא משנה את לוגיקת המערכת) ===== -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function() {
+    const TABLE = 'schedule_state';
+    const LS = { url: 'sb_url', key: 'sb_key', ws: 'sb_workspace' };
+    let sb = null;
+    let workspace = localStorage.getItem(LS.ws) || 'main';
+    let uploadTimer = null;
+    let suppressUpload = false;
+
+    // ---- אינדיקטור סטטוס ----
+    function setStatus(state, text) {
+        const pill = document.getElementById('cloudPill');
+        const txt = document.getElementById('cloudPillText');
+        if (!pill) return;
+        pill.classList.remove('is-synced', 'is-saving', 'is-error');
+        if (state === 'synced') pill.classList.add('is-synced');
+        else if (state === 'saving') pill.classList.add('is-saving');
+        else if (state === 'error') pill.classList.add('is-error');
+        if (txt && text) txt.textContent = text;
+    }
+
+    function getConfig() {
+        return {
+            url: (localStorage.getItem(LS.url) || '').trim(),
+            key: (localStorage.getItem(LS.key) || '').trim(),
+            ws: (localStorage.getItem(LS.ws) || 'main').trim()
+        };
+    }
+
+    function initClient() {
+        const c = getConfig();
+        workspace = c.ws || 'main';
+        if (!c.url || !c.key) { sb = null; setStatus('', 'ענן לא מוגדר'); return false; }
+        if (!window.supabase) { setStatus('error', 'טעינת ספריית הענן נכשלה'); return false; }
+        try {
+            sb = window.supabase.createClient(c.url, c.key);
+            return true;
+        } catch (e) {
+            sb = null; setStatus('error', 'שגיאת הגדרות ענן'); return false;
+        }
+    }
+
+    // ---- העלאה לענן (debounced) ----
+    function scheduleUpload() {
+        if (!sb || suppressUpload) return;
+        clearTimeout(uploadTimer);
+        setStatus('saving', 'שומר לענן...');
+        uploadTimer = setTimeout(pushToCloud, 1100);
+    }
+
+    async function pushToCloud() {
+        if (!sb) return;
+        try {
+            const payload = {
+                globalEmployees: JSON.parse(localStorage.getItem('globalEmployees') || '[]'),
+                weeksData: JSON.parse(localStorage.getItem('weeksData') || '{}'),
+                lastSelectedWeek: localStorage.getItem('lastSelectedWeek') || ''
+            };
+            const { error } = await sb.from(TABLE).upsert({
+                id: workspace,
+                data: payload,
+                updated_at: new Date().toISOString()
+            });
+            if (error) throw error;
+            setStatus('synced', 'מסונכרן ✓');
+        } catch (e) {
+            console.error('Cloud upload failed:', e);
+            setStatus('error', 'שמירה לענן נכשלה');
+        }
+    }
+
+    // ---- טעינה מהענן + רענון המסך ----
+    async function pullFromCloud(showAlerts) {
+        if (!initClient()) { if (showAlerts) alert('יש להגדיר תחילה חיבור לענן (⚙️ הגדרות ענן).'); return; }
+        setStatus('saving', 'טוען מהענן...');
+        try {
+            const { data, error } = await sb.from(TABLE).select('data').eq('id', workspace).maybeSingle();
+            if (error) throw error;
+            if (data && data.data) {
+                const d = data.data;
+                suppressUpload = true;
+                if (Array.isArray(d.globalEmployees)) {
+                    globalEmployees = d.globalEmployees;
+                    localStorage.setItem('globalEmployees', JSON.stringify(globalEmployees));
+                }
+                if (d.weeksData && typeof d.weeksData === 'object') {
+                    weeksData = d.weeksData;
+                    localStorage.setItem('weeksData', JSON.stringify(weeksData));
+                }
+                if (d.lastSelectedWeek) localStorage.setItem('lastSelectedWeek', d.lastSelectedWeek);
+                suppressUpload = false;
+                // רענון תצוגה באמצעות פונקציות המערכת הקיימות
+                initWeekSelector();
+                renderEmployeeList();
+                switchWeek();
+                setStatus('synced', 'מסונכרן ✓');
+                if (showAlerts) alert('הנתונים נטענו מהענן בהצלחה! ☁️');
+            } else {
+                // אין נתונים בענן עדיין - נעלה את המקומיים
+                await pushToCloud();
+                if (showAlerts) alert('לא נמצאו נתונים בענן - הנתונים המקומיים הועלו עכשיו.');
+            }
+        } catch (e) {
+            console.error('Cloud load failed:', e);
+            setStatus('error', 'טעינה מהענן נכשלה');
+            if (showAlerts) alert('טעינה מהענן נכשלה. בדוק את פרטי החיבור והטבלה.');
+        }
+    }
+
+    // ---- יירוט שמירות מקומיות כדי לסנכרן אוטומטית (ללא שינוי בפונקציות הקיימות) ----
+    const _setItem = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function(k, v) {
+        _setItem(k, v);
+        if (k === 'globalEmployees' || k === 'weeksData' || k === 'lastSelectedWeek') {
+            scheduleUpload();
+        }
+    };
+
+    // ---- פונקציות גלובליות לכפתורים ----
+    window.openCloudSettings = function() {
+        const c = getConfig();
+        document.getElementById('sbUrlInput').value = c.url;
+        document.getElementById('sbKeyInput').value = c.key;
+        document.getElementById('sbWorkspaceInput').value = c.ws || 'main';
+        document.getElementById('cloudSettingsOverlay').classList.add('open');
+    };
+    window.closeCloudSettings = function() {
+        document.getElementById('cloudSettingsOverlay').classList.remove('open');
+    };
+    window.saveCloudSettings = function() {
+        const url = document.getElementById('sbUrlInput').value.trim();
+        const key = document.getElementById('sbKeyInput').value.trim();
+        const ws = (document.getElementById('sbWorkspaceInput').value.trim() || 'main');
+        if (!url || !key) { alert('יש למלא Project URL ו-Anon Key.'); return; }
+        localStorage.setItem(LS.url, url);
+        localStorage.setItem(LS.key, key);
+        localStorage.setItem(LS.ws, ws);
+        closeCloudSettings();
+        if (initClient()) { setStatus('saving', 'מתחבר...'); pullFromCloud(true); }
+    };
+    window.disconnectCloud = function() {
+        if (!confirm('לנתק את החיבור לענן במכשיר זה? הנתונים המקומיים יישמרו.')) return;
+        localStorage.removeItem(LS.url);
+        localStorage.removeItem(LS.key);
+        sb = null;
+        closeCloudSettings();
+        setStatus('', 'ענן לא מוגדר');
+    };
+    window.syncNow = function() {
+        if (!initClient()) { openCloudSettings(); return; }
+        pushToCloud();
+    };
+    window.loadFromCloud = function() { pullFromCloud(true); };
+
+    // ---- אתחול אחרי שהמערכת המקורית סיימה להיטען ----
+    window.addEventListener('load', function() {
+        if (getConfig().url && getConfig().key) {
+            pullFromCloud(false);
+        } else {
+            setStatus('', 'ענן לא מוגדר');
+        }
+    });
+})();
+</script>
+
+</body>
+</html>
