@@ -243,6 +243,34 @@
         .modal-body label:first-child { margin-top: 0; }
         .modal-hint { font-size:12px; color: var(--muted); margin-top:16px; line-height:1.7; background: rgba(255,255,255,0.55); padding:13px; border-radius:13px; border: 1px solid rgba(255,255,255,0.6); }
         .modal-foot { display:flex; gap:10px; justify-content:flex-start; padding: 0 24px 22px; }
+
+        /* ===== Rules feature ===== */
+        #blockingPanel { display:none; padding:16px 18px; border-radius:16px; margin-bottom:14px;
+            background: rgba(255,69,58,0.14); backdrop-filter: blur(12px); border:1px solid rgba(255,69,58,0.5); border-right:6px solid var(--red); box-shadow: var(--shadow-glass); }
+        #blockingPanel strong { color:#b3160c; font-size:15px; }
+        #blockingPanel ul { margin:8px 0 0; padding-right:22px; color:#a3140b; line-height:1.85; font-size:14px; font-weight:600; }
+
+        select.alert-cell { background-color:#ffe2df !important; border-color: var(--red) !important; color:#9c1f17 !important; font-weight:700; box-shadow:0 0 0 2px rgba(255,69,58,0.5); }
+        select.blocked-cell { background-color:#ffd0cb !important; border-color:#b3160c !important; color:#7a0f08 !important; font-weight:800;
+            box-shadow:0 0 0 3px rgba(179,22,12,0.6) !important; }
+
+        .emp-item .emp-name-label { font-weight:600; }
+        .emp-item .emp-controls { display:flex; align-items:center; gap:6px; }
+        .rest-day-select { width:auto !important; min-width:70px; padding:4px 6px !important; font-size:12px !important; border-radius:8px !important; }
+
+        .modal-card-wide { max-width: 680px; }
+        .rule-row { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:12px 4px; border-bottom:1px solid var(--line); }
+        .rule-row:last-of-type { border-bottom:none; }
+        .rule-info { flex:1; }
+        .rule-name { font-weight:700; font-size:14.5px; color:var(--ink); }
+        .rule-desc { font-size:12px; color:var(--muted); margin-top:2px; line-height:1.5; }
+        .rule-controls { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+        .rule-mode { width:auto !important; min-width:100px; padding:8px 10px !important; font-weight:700; }
+        .rule-param { width:64px !important; text-align:center; padding:8px 6px !important; }
+        .rule-hours { margin-top:16px; padding:14px; border-radius:14px; background: rgba(10,132,255,0.07); border:1px solid rgba(10,132,255,0.2); }
+        .rule-hours-title { font-weight:700; margin-bottom:8px; color: var(--accent-deep); }
+        .rule-hours label { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px; font-weight:600; color:var(--ink-soft); margin:6px 0; }
+        .rule-hours label input { width:80px !important; }
     </style>
 </head>
 <body>
@@ -267,6 +295,7 @@
         </div>
         <div class="header-status">
             <span id="cloudPill" class="cloud-pill"><span class="dot"></span><span id="cloudPillText">ענן לא מוגדר</span></span>
+            <button class="ghost" onclick="openRulesSettings()" style="padding:8px 14px;">⚖️ הגדרות חוקים</button>
             <button class="ghost" onclick="openCloudSettings()" style="padding:8px 14px;">⚙️ הגדרות ענן</button>
         </div>
     </div>
@@ -284,6 +313,11 @@
         <button class="cloud-btn" onclick="syncNow()">☁️ שמור לענן</button>
         <button class="cloud-btn" onclick="loadFromCloud()">⬇️ טען מהענן</button>
         <button style="margin-right: auto; background-color: #27ae60;" onclick="downloadImage()">הורד סידור כתמונה 📸</button>
+    </div>
+
+    <div id="blockingPanel">
+        <strong>⛔ חסימות – יש לתקן לפני אישור הסידור:</strong>
+        <ul id="blockingList"></ul>
     </div>
 
     <div id="alertsPanel">
@@ -433,6 +467,42 @@
     const plazas = ["krayot", "coast"];
     const shiftTypes = ["בוקר", "צהריים", "לילה"];
 
+    // ===================== חוקי עבודה ומנוחה =====================
+    // כל חוק ניתן להגדרה: 'off' (כבוי) / 'warn' (התראה) / 'block' (חסימה)
+    const RULE_DEFS = [
+        { id: 'restBetween',      name: '8 שעות מנוחה בין משמרות',        def: 'warn',  desc: 'לפחות 8 שעות בין סיום משמרת לתחילת הבאה (לילה←בוקר, ומשמרות רצופות באותו יום).' },
+        { id: 'consecutiveDays',  name: 'מקסימום ימי עבודה רצופים',      def: 'warn',  param: 'consecutiveMax', desc: 'לא יותר מ-X ימי עבודה ברצף (כולל המשך מהשבוע הקודם).' },
+        { id: 'nightsTwoWeeks',   name: 'מגבלת לילות בשבועיים',           def: 'warn',  param: 'nightsMax', desc: 'עבודת לילה עד שבוע אחד מתוך שבועיים – לכל היותר X לילות בשבועיים.' },
+        { id: 'weeklyRest',       name: 'יום מנוחה שבועי לכל עובד',       def: 'off',   desc: 'כל עובד לא ישובץ ביום המנוחה השבועי שהוגדר לו (שבת / ראשון / שישי). כבוי כברירת מחדל כי בפועל עובדים בשבת בהיתר.' },
+        { id: 'restEvery4Weeks',  name: 'מנוחה בפועל אחת ל-4 שבועות',    def: 'warn',  desc: 'לפחות אחת ל-4 שבועות העובד מקבל את יום המנוחה השבועי שלו בפועל.' },
+        { id: 'maxDailyHours',    name: 'מקסימום שעות עבודה ביום',        def: 'warn',  param: 'maxDaily', desc: 'יום עבודה כולל שעות נוספות לא יעלה על X שעות.' },
+        { id: 'maxWeeklyOvertime',name: 'מקסימום שעות נוספות בשבוע',      def: 'off',   param: 'weeklyOTMax', desc: 'עד X שעות נוספות בשבוע (דורש הגדרת שעות משמרת).' },
+        { id: 'nightWeekHours',   name: 'שבוע לילה עד 58 שעות',           def: 'off',   param: 'nightWeekMax', desc: 'בשבוע עם עבודת לילה – עד X שעות כולל נוספות (דורש הגדרת שעות משמרת).' },
+        { id: 'weeklyShifts',     name: 'טווח משמרות שבועי לעובד',        def: 'warn',  desc: 'התראה על חריגה מהמינימום/מקסימום משמרות בשבוע.' },
+        { id: 'physicalConflict', name: 'התנגשות פיזית בין פלאזות',       def: 'block', desc: 'עובד לא יכול להיות בשתי פלאזות באותה משמרת.' },
+        { id: 'constraintConflict', name: 'ניגוד אילוצים',                def: 'warn',  desc: 'שיבוץ שסותר אילוץ שהוגדר לעובד.' }
+    ];
+    const DEFAULT_PARAMS = { consecutiveMax: 6, nightsMax: 6, maxDaily: 12, weeklyOTMax: 16, nightWeekMax: 58,
+                             weeklyShiftsMin: 5, weeklyShiftsMax: 6, shiftHours: 8, doubleHours: 12, regularWeeklyHours: 43 };
+    const REST_DAY_OPTIONS = ["שבת", "ראשון", "שישי", "ללא"];
+
+    let ruleSettings = JSON.parse(localStorage.getItem('ruleSettings')) || {};
+    let ruleParams = Object.assign({}, DEFAULT_PARAMS, JSON.parse(localStorage.getItem('ruleParams')) || {});
+    let employeeRestDays = JSON.parse(localStorage.getItem('employeeRestDays')) || {};
+
+    function getRuleMode(id) {
+        if (ruleSettings[id] !== undefined) return ruleSettings[id];
+        let d = RULE_DEFS.find(r => r.id === id);
+        return d ? d.def : 'warn';
+    }
+    function getParam(name) { return (ruleParams[name] !== undefined) ? ruleParams[name] : DEFAULT_PARAMS[name]; }
+    function getRestDay(emp) { return employeeRestDays[emp] || "שבת"; }
+    function saveRulesConfig() {
+        localStorage.setItem('ruleSettings', JSON.stringify(ruleSettings));
+        localStorage.setItem('ruleParams', JSON.stringify(ruleParams));
+        localStorage.setItem('employeeRestDays', JSON.stringify(employeeRestDays));
+    }
+
     // משתנה הגלובלי של המברשת הפעילה לשיבוץ בלחיצה
     let activeBrushValue = ""; 
 
@@ -575,7 +645,12 @@
             div.className = 'emp-item';
             div.style.borderRight = `5px solid ${color}`;
             div.style.paddingRight = "5px";
-            div.innerHTML = `<span>${emp}</span> <button class="danger" onclick="removeEmployee('${emp}')">מחק</button>`;
+            let restOpts = REST_DAY_OPTIONS.map(d => `<option value="${d}" ${getRestDay(emp) === d ? 'selected' : ''}>${d === 'ללא' ? 'ללא מנוחה' : d}</option>`).join('');
+            div.innerHTML = `<span class="emp-name-label">${emp}</span>
+                <span class="emp-controls">
+                    <select class="rest-day-select" title="יום מנוחה שבועי" onchange="setRestDay('${emp}', this.value)">${restOpts}</select>
+                    <button class="danger" onclick="removeEmployee('${emp}')">מחק</button>
+                </span>`;
             container.appendChild(div);
         });
 
@@ -733,12 +808,67 @@
         return null;
     }
 
+    function setRestDay(emp, day) {
+        employeeRestDays[emp] = day;
+        saveRulesConfig();
+        runValidationEngine();
+    }
+
+    function openRulesSettings() {
+        let body = document.getElementById('rulesSettingsBody');
+        let html = '';
+        RULE_DEFS.forEach(r => {
+            let mode = getRuleMode(r.id);
+            let paramHtml = r.param ? `<input type="number" class="rule-param" data-param="${r.param}" value="${getParam(r.param)}" min="0" title="ערך סף">` : '';
+            html += `<div class="rule-row">
+                <div class="rule-info"><div class="rule-name">${r.name}</div><div class="rule-desc">${r.desc}</div></div>
+                <div class="rule-controls">
+                    ${paramHtml}
+                    <select class="rule-mode" data-rule="${r.id}">
+                        <option value="off" ${mode==='off'?'selected':''}>כבוי</option>
+                        <option value="warn" ${mode==='warn'?'selected':''}>⚠️ התראה</option>
+                        <option value="block" ${mode==='block'?'selected':''}>⛔ חסימה</option>
+                    </select>
+                </div>
+            </div>`;
+        });
+        html += `<div class="rule-hours">
+            <div class="rule-hours-title">⏱️ מודל שעות (בסיס לחישוב חוקי השעות)</div>
+            <label>שעות למשמרת רגילה <input type="number" class="rule-param" data-param="shiftHours" value="${getParam('shiftHours')}" min="1"></label>
+            <label>שעות למשמרת כפולה <input type="number" class="rule-param" data-param="doubleHours" value="${getParam('doubleHours')}" min="1"></label>
+            <label>שעות רגילות בשבוע (מעבר לכך = שעות נוספות) <input type="number" class="rule-param" data-param="regularWeeklyHours" value="${getParam('regularWeeklyHours')}" min="1"></label>
+        </div>`;
+        body.innerHTML = html;
+        document.getElementById('rulesSettingsOverlay').classList.add('open');
+    }
+    function closeRulesSettings() { document.getElementById('rulesSettingsOverlay').classList.remove('open'); }
+    function saveRulesSettings() {
+        document.querySelectorAll('#rulesSettingsBody .rule-mode').forEach(sel => { ruleSettings[sel.dataset.rule] = sel.value; });
+        document.querySelectorAll('#rulesSettingsBody .rule-param').forEach(inp => { let v = parseFloat(inp.value); if (!isNaN(v)) ruleParams[inp.dataset.param] = v; });
+        saveRulesConfig();
+        closeRulesSettings();
+        runValidationEngine();
+    }
+
     function runValidationEngine() {
         let currentWeekKey = document.getElementById('currentWeek').value;
         if (!currentWeekKey) return;
         let allSelects = document.querySelectorAll('table.shifts-table select');
         let alerts = [];
-        
+        let blockingAlerts = [];
+
+        // ניתוב הפרות לפי מצב החוק שנבחר בהגדרות: כבוי / התראה / חסימה
+        function addViolation(ruleId, msg, cells) {
+            let mode = getRuleMode(ruleId);
+            if (mode === 'off') return;
+            if (cells) cells.forEach(c => { if (c) c.classList.add(mode === 'block' ? 'blocked-cell' : 'alert-cell'); });
+            if (mode === 'block') {
+                if (!blockingAlerts.includes(msg)) blockingAlerts.push(msg);
+            } else {
+                if (!alerts.includes(msg)) alerts.push(msg);
+            }
+        }
+
         let shiftCounts = {};
         let doubleCounts = {};
         let nightCounts = {};
@@ -827,8 +957,7 @@
                     });
 
                     if (exactConflictEmps.length > 0) {
-                        sunMorningSelect.classList.add('alert-cell');
-                        alerts.push(`⚠️ מנוחת לילה חסרה משבוע שעבר! העובדים [${exactConflictEmps.join(', ')}] עבדו בלילה במוצ"ש האחרון ושובצו בבוקר יום ראשון.`);
+                        addViolation('restBetween', `⚠️ מנוחת לילה חסרה משבוע שעבר! העובדים [${exactConflictEmps.join(', ')}] עבדו בלילה במוצ"ש האחרון ושובצו בבוקר יום ראשון.`, [sunMorningSelect]);
                     }
                 }
             });
@@ -898,12 +1027,12 @@
             }
 
             // התרעה אחת בלבד לכל עובד, עם המספר הנכון
-            if (maxStreak > 6) {
-                for (let d = maxRunStart; d <= maxRunEnd; d++) {
-                    daySelectsByDay[d].forEach(s => s.classList.add('alert-cell'));
-                }
+            let consecutiveMax = getParam('consecutiveMax');
+            if (maxStreak > consecutiveMax) {
+                let streakCells = [];
+                for (let d = maxRunStart; d <= maxRunEnd; d++) { streakCells = streakCells.concat(daySelectsByDay[d]); }
                 let extra = carryForMax > 0 ? ` (כולל ${carryForMax} ימים מהשבוע הקודם)` : "";
-                alerts.push(`❌ חריגת רצף עבודה: ${emp} משובץ ל-${maxStreak} ימי עבודה רצופים${extra}. מקסימום מותר: 6.`);
+                addViolation('consecutiveDays', `❌ חריגת רצף עבודה: ${emp} משובץ ל-${maxStreak} ימי עבודה רצופים${extra}. מקסימום מותר: ${consecutiveMax}.`, streakCells);
             }
         });
 
@@ -916,20 +1045,19 @@
                 if (assignments.length > 1) {
                     let shiftsSeen = {};
                     let hasConflict = false;
+                    let conflictCells = [];
                     
                     assignments.forEach(ast => {
                         if (shiftsSeen[ast.shift]) {
                             hasConflict = true;
-                            ast.select.classList.add('alert-cell');
-                            shiftsSeen[ast.shift].select.classList.add('alert-cell');
+                            conflictCells.push(ast.select, shiftsSeen[ast.shift].select);
                         } else {
                             shiftsSeen[ast.shift] = ast;
                         }
                     });
                     
                     if (hasConflict) {
-                        let msg = `❌ התנגשות פיזית: ${emp} משובץ באותה משמרת במספר פלאזות במקביל ביום ${dayName}`;
-                        if (!alerts.includes(msg)) alerts.push(msg);
+                        addViolation('physicalConflict', `❌ התנגשות פיזית: ${emp} משובץ באותה משמרת במספר פלאזות במקביל ביום ${dayName}`, conflictCells);
                     }
 
                     // 8 שעות מנוחה בין משמרות באותו יום: בוקר→צהריים או צהריים→לילה (רצופות, ללא מנוחה).
@@ -938,9 +1066,7 @@
                     let backToBack = (shiftsToday.includes('בוקר') && shiftsToday.includes('צהריים')) ||
                                      (shiftsToday.includes('צהריים') && shiftsToday.includes('לילה'));
                     if (backToBack) {
-                        assignments.forEach(a => { if (a.shift !== 'לילה' || shiftsToday.includes('צהריים')) a.select.classList.add('alert-cell'); });
-                        let msg2 = `⏱️ פחות מ-8 שעות מנוחה: ${emp} משובץ למשמרות רצופות ביום ${dayName}`;
-                        if (!alerts.includes(msg2)) alerts.push(msg2);
+                        addViolation('restBetween', `⏱️ פחות מ-8 שעות מנוחה: ${emp} משובץ למשמרות רצופות ביום ${dayName}`, assignments.map(a => a.select));
                     }
                 }
             }
@@ -963,10 +1089,7 @@
                     let currentSubList = getSubEmployees(rawEmp);
                     let nightSubList = getSubEmployees(nightRawEmp);
                     if(currentSubList.some(empName => nightSubList.includes(empName))) {
-                        currentSelect.classList.add('alert-cell'); nightSelect.classList.add('alert-cell');
-                        if (!alerts.includes(`⚠️ מנוחת לילה חסרה! עובד בלילה ביום ${daysOfWeek[dayIdx-1]} ובוקר למחרת ביום ${dayName}`)) {
-                            alerts.push(`⚠️ מנוחת לילה חסרה! עובד בלילה ביום ${daysOfWeek[dayIdx-1]} ובוקר למחרת ביום ${dayName}`);
-                        }
+                        addViolation('restBetween', `⚠️ מנוחת לילה חסרה! עובד בלילה ביום ${daysOfWeek[dayIdx-1]} ובוקר למחרת ביום ${dayName}`, [currentSelect, nightSelect]);
                     }
                 });
             }
@@ -977,11 +1100,9 @@
                 if(weekConstraints[emp] && weekConstraints[emp][dayIdx]) {
                     let rule = weekConstraints[emp][dayIdx];
                     if(rule === "חופש") {
-                        currentSelect.classList.add('alert-cell');
-                        alerts.push(`ניגוד אילוצים: ${emp} ביקש חופש ביום ${dayName} אך שובץ ב${plazaHeb}`);
+                        addViolation('constraintConflict', `ניגוד אילוצים: ${emp} ביקש חופש ביום ${dayName} אך שובץ ב${plazaHeb}`, [currentSelect]);
                     } else if(rule !== currentShift) {
-                        currentSelect.classList.add('alert-cell');
-                        alerts.push(`ניגוד אילוצים: ${emp} ביקש רק משמרת [${rule}] ביום ${dayName} אך שובץ ב${plazaHeb}`);
+                        addViolation('constraintConflict', `ניגוד אילוצים: ${emp} ביקש רק משמרת [${rule}] ביום ${dayName} אך שובץ ב${plazaHeb}`, [currentSelect]);
                     }
                 }
             });
@@ -989,23 +1110,29 @@
 
         buildExcelLiveUI(shiftCounts, doubleCounts, nightCounts, prevNightCounts);
 
+        let wkMax = getParam('weeklyShiftsMax'), wkMin = getParam('weeklyShiftsMin');
         for (let emp in shiftCounts) {
             if(emp.includes('+')) continue; 
             let count = shiftCounts[emp];
-            if(count > 6) alerts.push(`❌ חריגת משמרות: ${emp} משובץ ל-${count} משמרות (מקסימום מותר: 6).`);
-            else if (count < 5 && count > 0) alerts.push(`⚠️ תשומת לב: ל${emp} יש כרגע פחות מהמינימום (${count} משמרות).`);
+            if(count > wkMax) addViolation('weeklyShifts', `❌ חריגת משמרות: ${emp} משובץ ל-${count} משמרות (מקסימום מותר: ${wkMax}).`);
+            else if (count < wkMin && count > 0) addViolation('weeklyShifts', `⚠️ תשומת לב: ל${emp} יש כרגע פחות מהמינימום (${count} משמרות, מינימום ${wkMin}).`);
         }
 
-        // התרעת עומס לילות: יותר מ-6 לילות בחלון של שבועיים (שבוע נוכחי + שבוע קודם)
+        // מגבלת לילות בשבועיים (שבוע נוכחי + שבוע קודם)
+        let nightsMax = getParam('nightsMax');
         globalEmployees.forEach(emp => {
             if (emp.includes('+')) return;
             let nThis = nightCounts[emp] || 0;
             let nPrev = prevNightCounts[emp] || 0;
             let nTwoWeek = nThis + nPrev;
-            if (nTwoWeek > 6) {
-                alerts.push(`🌙 עומס לילות: ${emp} משובץ ל-${nTwoWeek} לילות בשבועיים (השבוע ${nThis}, שבוע שעבר ${nPrev}). מקסימום מותר: 6.`);
+            if (nTwoWeek > nightsMax) {
+                addViolation('nightsTwoWeeks', `🌙 עומס לילות: ${emp} משובץ ל-${nTwoWeek} לילות בשבועיים (השבוע ${nThis}, שבוע שעבר ${nPrev}). מקסימום מותר: ${nightsMax}.`);
             }
         });
+
+        // ===== חוקי מנוחה שבועית ושעות (חדשים) =====
+        runLaborLawRules(currentWeekKey, allSelects, addViolation);
+
 
         let panel = document.getElementById('alertsPanel');
         let list = document.getElementById('alertsList');
@@ -1014,6 +1141,115 @@
             panel.style.display = 'block';
             alerts.forEach(m => { let li = document.createElement('li'); li.innerHTML = m; list.appendChild(li); });
         } else { panel.style.display = 'none'; }
+
+        // פאנל חסימות (חוקים שהוגדרו כ"חסימה")
+        let bPanel = document.getElementById('blockingPanel');
+        let bList = document.getElementById('blockingList');
+        if (bPanel && bList) {
+            bList.innerHTML = "";
+            if (blockingAlerts.length > 0) {
+                bPanel.style.display = 'block';
+                blockingAlerts.forEach(m => { let li = document.createElement('li'); li.innerHTML = m; bList.appendChild(li); });
+            } else { bPanel.style.display = 'none'; }
+        }
+    }
+
+    // ===================== חוקי מנוחה שבועית + שעות =====================
+    function runLaborLawRules(currentWeekKey, allSelects, addViolation) {
+        // מפה: לכל עובד, לכל יום – רשימת המשמרות (עם המרת כפולה למספר שעות)
+        let dailyShifts = {}; // emp -> [day] -> array of shift names
+        globalEmployees.forEach(e => { if(!e.includes('+')) dailyShifts[e] = [[],[],[],[],[],[],[]]; });
+
+        allSelects.forEach(sel => {
+            let val = sel.value; if (!val) return;
+            let day = parseInt(sel.dataset.day);
+            let shift = sel.dataset.shift;
+            let subs = (val === "כפולה") ? [] : getSubEmployees(val).map(s => { let m = findGlobalEmployee(s); return m ? m : s; });
+            subs.forEach(emp => { if (dailyShifts[emp]) dailyShifts[emp][day].push(shift); });
+        });
+
+        let SH = getParam('shiftHours'), DH = getParam('doubleHours');
+        let maxDaily = getParam('maxDaily'), otMax = getParam('weeklyOTMax'), nightWeekMax = getParam('nightWeekMax');
+        let regularWeekly = getParam('regularWeeklyHours');
+
+        function dayHours(shiftsArr) {
+            // משמרת רגילה = SH שעות; אם יש שילוב בוקר+לילה נחשיב כמשמרת כפולה (DH)
+            if (shiftsArr.includes('בוקר') && shiftsArr.includes('לילה') && !shiftsArr.includes('צהריים')) return DH;
+            return shiftsArr.length * SH;
+        }
+
+        globalEmployees.forEach(emp => {
+            if (emp.includes('+')) return;
+            let week = dailyShifts[emp]; if (!week) return;
+
+            // --- יום מנוחה שבועי (לפי היום שהוגדר לעובד) ---
+            let restDay = getRestDay(emp);
+            let restIdx = daysOfWeek.indexOf(restDay);
+            if (restIdx >= 0 && week[restIdx].length > 0) {
+                let cells = getCellsFor(emp, restIdx);
+                addViolation('weeklyRest', `🛌 מנוחה שבועית: ${emp} משובץ ביום המנוחה שהוגדר לו (${restDay}).`, cells);
+            }
+
+            // --- שעות ---
+            let weeklyHours = 0, hasNight = false;
+            for (let d = 0; d < 7; d++) {
+                let dh = dayHours(week[d]);
+                weeklyHours += dh;
+                if (week[d].includes('לילה')) hasNight = true;
+                if (dh > maxDaily) {
+                    addViolation('maxDailyHours', `⏳ חריגת שעות יומית: ${emp} עם כ-${dh} שעות ביום ${daysOfWeek[d]} (מקסימום ${maxDaily}).`, getCellsFor(emp, d));
+                }
+            }
+            let overtime = Math.max(0, weeklyHours - regularWeekly);
+            if (overtime > otMax) {
+                addViolation('maxWeeklyOvertime', `📈 חריגת שעות נוספות: ${emp} עם כ-${overtime} שעות נוספות השבוע (מקסימום ${otMax}).`);
+            }
+            if (hasNight && weeklyHours > nightWeekMax) {
+                addViolation('nightWeekHours', `🌙 שבוע לילה: ${emp} עם כ-${weeklyHours} שעות בשבוע לילה (מקסימום ${nightWeekMax}).`);
+            }
+        });
+
+        // --- מנוחה בפועל אחת ל-4 שבועות ---
+        if (getRuleMode('restEvery4Weeks') !== 'off') {
+            let sortedKeys = (typeof getSortedWeekKeys === 'function') ? getSortedWeekKeys() : Object.keys(weeksData);
+            let idx = sortedKeys.indexOf(currentWeekKey);
+            if (idx >= 3) {
+                let last4 = sortedKeys.slice(idx - 3, idx + 1);
+                globalEmployees.forEach(emp => {
+                    if (emp.includes('+')) return;
+                    let restDay = getRestDay(emp);
+                    let restIdx = daysOfWeek.indexOf(restDay);
+                    if (restIdx < 0) return;
+                    let gotRestOnce = false;
+                    last4.forEach(wk => {
+                        let shifts = weeksData[wk] ? weeksData[wk].shifts : {};
+                        let worked = false;
+                        plazas.forEach(plz => shiftTypes.forEach(shf => {
+                            let v = shifts[`${plz}_${shf}_${restIdx}`];
+                            if (v && v !== "כפולה") {
+                                let subs = getSubEmployees(v).map(s => { let m = findGlobalEmployee(s); return m ? m : s; });
+                                if (subs.includes(emp)) worked = true;
+                            }
+                        }));
+                        if (!worked) gotRestOnce = true;
+                    });
+                    if (!gotRestOnce) {
+                        addViolation('restEvery4Weeks', `📅 מנוחה בפועל: ${emp} לא קיבל את יום המנוחה (${restDay}) באף אחד מ-4 השבועות האחרונים.`);
+                    }
+                });
+            }
+        }
+    }
+
+    // עזר: איתור תאי ה-select של עובד ביום מסוים (לצביעה)
+    function getCellsFor(emp, day) {
+        let cells = [];
+        document.querySelectorAll(`table.shifts-table select[data-day='${day}']`).forEach(sel => {
+            if (!sel.value || sel.value === "כפולה") return;
+            let subs = getSubEmployees(sel.value).map(s => { let m = findGlobalEmployee(s); return m ? m : s; });
+            if (subs.includes(emp)) cells.push(sel);
+        });
+        return cells;
     }
 
     function buildExcelLiveUI(shiftCounts, doubleCounts, nightCounts, prevNightCounts) {
@@ -1129,6 +1365,7 @@
         document.getElementById('sidebarArea').style.display = 'none';
         document.getElementById('weekSelectorArea').style.display = 'none';
         document.getElementById('alertsPanel').style.display = 'none';
+        let _blk = document.getElementById('blockingPanel'); if (_blk) _blk.style.display = 'none';
         document.getElementById('excelLiveContainer').style.display = 'none';
         
         let header = document.getElementById('renderedHeader');
@@ -1175,6 +1412,20 @@
     }
 </script>
 
+
+<div class="modal-overlay" id="rulesSettingsOverlay">
+    <div class="modal-card modal-card-wide">
+        <div class="modal-head" style="background: linear-gradient(120deg,#0e7d63,#0a84ff);">
+            <h2>⚖️ הגדרות חוקי עבודה ומנוחה</h2>
+            <p>לכל חוק בחר: כבוי / התראה / חסימה. חוקים בחסימה מסומנים בפאנל אדום נפרד.</p>
+        </div>
+        <div class="modal-body" id="rulesSettingsBody" style="max-height:60vh; overflow-y:auto;"></div>
+        <div class="modal-foot">
+            <button class="cloud-btn" onclick="saveRulesSettings()">💾 שמור הגדרות</button>
+            <button class="secondary" onclick="closeRulesSettings()">סגור</button>
+        </div>
+    </div>
+</div>
 
 <div class="modal-overlay" id="cloudSettingsOverlay">
     <div class="modal-card">
@@ -1275,7 +1526,10 @@
             const payload = {
                 globalEmployees: JSON.parse(localStorage.getItem('globalEmployees') || '[]'),
                 weeksData: JSON.parse(localStorage.getItem('weeksData') || '{}'),
-                lastSelectedWeek: localStorage.getItem('lastSelectedWeek') || ''
+                lastSelectedWeek: localStorage.getItem('lastSelectedWeek') || '',
+                ruleSettings: JSON.parse(localStorage.getItem('ruleSettings') || '{}'),
+                ruleParams: JSON.parse(localStorage.getItem('ruleParams') || '{}'),
+                employeeRestDays: JSON.parse(localStorage.getItem('employeeRestDays') || '{}')
             };
             const { error } = await sb.from(TABLE).upsert({
                 id: workspace,
@@ -1309,6 +1563,18 @@
                     localStorage.setItem('weeksData', JSON.stringify(weeksData));
                 }
                 if (d.lastSelectedWeek) localStorage.setItem('lastSelectedWeek', d.lastSelectedWeek);
+                if (d.ruleSettings && typeof d.ruleSettings === 'object') {
+                    ruleSettings = d.ruleSettings;
+                    localStorage.setItem('ruleSettings', JSON.stringify(ruleSettings));
+                }
+                if (d.ruleParams && typeof d.ruleParams === 'object') {
+                    ruleParams = Object.assign({}, DEFAULT_PARAMS, d.ruleParams);
+                    localStorage.setItem('ruleParams', JSON.stringify(ruleParams));
+                }
+                if (d.employeeRestDays && typeof d.employeeRestDays === 'object') {
+                    employeeRestDays = d.employeeRestDays;
+                    localStorage.setItem('employeeRestDays', JSON.stringify(employeeRestDays));
+                }
                 suppressUpload = false;
                 // רענון תצוגה באמצעות פונקציות המערכת הקיימות
                 initWeekSelector();
@@ -1332,7 +1598,7 @@
     const _setItem = localStorage.setItem.bind(localStorage);
     localStorage.setItem = function(k, v) {
         _setItem(k, v);
-        if (k === 'globalEmployees' || k === 'weeksData' || k === 'lastSelectedWeek') {
+        if (k === 'globalEmployees' || k === 'weeksData' || k === 'lastSelectedWeek' || k === 'ruleSettings' || k === 'ruleParams' || k === 'employeeRestDays') {
             scheduleUpload();
         }
     };
