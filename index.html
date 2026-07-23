@@ -271,6 +271,9 @@
         .rule-hours-title { font-weight:700; margin-bottom:8px; color: var(--accent-deep); }
         .rule-hours label { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px; font-weight:600; color:var(--ink-soft); margin:6px 0; }
         .rule-hours label input { width:80px !important; }
+
+        button.delete-week-btn { background: linear-gradient(135deg, #ff6a5e, var(--red));
+            box-shadow: 0 8px 18px -9px rgba(255,69,58,0.85), inset 0 1px 0 rgba(255,255,255,0.45); }
     </style>
 </head>
 <body>
@@ -304,7 +307,9 @@
     <div class="week-selector" id="weekSelectorArea">
         <label for="currentWeek"><strong>שבוע עבודה פעיל:</strong></label>
         <select id="currentWeek" onchange="switchWeek()"></select>
-        <button class="secondary" onclick="addNewWeek()">+ הוסף שבוע חדש</button>
+        <button class="secondary" onclick="addNewWeek()" title="נפתח אוטומטית השבוע הבא ברצף">+ פתח שבוע חדש</button>
+        <button class="secondary" onclick="setWeekDate()" title="קביעת תאריך תחילת השבוע לצורך מיון ובדיקת רצפים">📅 תאריך השבוע</button>
+        <button class="delete-week-btn" onclick="deleteWeek()" title="מחיקת השבוע המוצג">🗑️ מחק שבוע</button>
         
         <button class="backup-btn" onclick="exportBackup()">גבה נתונים לקובץ 💾</button>
         <button class="backup-btn" onclick="document.getElementById('importFileInput').click()">שחזר מגיבוי 📂</button>
@@ -516,23 +521,39 @@
     // ===== מיון שבועות לפי תאריך =====
     const hebrewMonths = { "ינואר":0, "פברואר":1, "מרץ":2, "אפריל":3, "מאי":4, "יוני":5, "יולי":6, "אוגוסט":7, "ספטמבר":8, "אוקטובר":9, "נובמבר":10, "דצמבר":11 };
 
-    function getWeekStartTimestamp(key) {
-        let entry = weeksData[key];
-        let text = ((entry && entry.label) ? entry.label : "") + " " + key.replace(/_/g, " ");
-        let monthNames = Object.keys(hebrewMonths).join("|");
-        let re = new RegExp("(\\d{1,2})\\s+(" + monthNames + ")\\s+(\\d{4})");
-        let m = text.match(re);
-        if (m) {
-            return new Date(parseInt(m[3], 10), hebrewMonths[m[2]], parseInt(m[1], 10)).getTime();
-        }
-        // ניסיון לתאריך מספרי (למשל 17/05/2026 או 17.5.2026)
-        let m2 = text.match(/(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})/);
-        if (m2) return new Date(parseInt(m2[3],10), parseInt(m2[2],10)-1, parseInt(m2[1],10)).getTime();
-        return Number.MAX_SAFE_INTEGER; // ללא תאריך מזוהה -> לסוף הרשימה
+    function parseDateFromText(text) {
+        if (!text) return null;
+        let mn = Object.keys(hebrewMonths).join("|");
+        // "17 מאי 2026"
+        let m1 = text.match(new RegExp("(\\d{1,2})\\s+(" + mn + ")\\s+(\\d{4})"));
+        if (m1) return new Date(parseInt(m1[3],10), hebrewMonths[m1[2]], parseInt(m1[1],10)).getTime();
+        // "17/05/2026" | "17.5.26" | "17-5-2026"
+        let m2 = text.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+        if (m2) { let y = parseInt(m2[3],10); if (y < 100) y += 2000; return new Date(y, parseInt(m2[2],10)-1, parseInt(m2[1],10)).getTime(); }
+        // "17 מאי" ללא שנה -> משלים את השנה הנוכחית
+        let m3 = text.match(new RegExp("(\\d{1,2})\\s+(" + mn + ")"));
+        if (m3) return new Date(new Date().getFullYear(), hebrewMonths[m3[2]], parseInt(m3[1],10)).getTime();
+        return null;
     }
 
+    // תאריך תחילת השבוע: קודם שדה startDate שנשמר, אחרת ניסיון פענוח מהתווית/מפתח
+    function getWeekDate(key) {
+        let entry = weeksData[key];
+        if (entry && entry.startDate) {
+            let t = Date.parse(entry.startDate);
+            if (!isNaN(t)) return t;
+        }
+        return parseDateFromText(((entry && entry.label) ? entry.label : "") + " " + key.replace(/_/g, " "));
+    }
+
+    // שבועות ללא תאריך (ישנים) מוצגים בתחילת הרשימה לפי סדר ההוספה,
+    // ואחריהם השבועות המתוארכים לפי סדר כרונולוגי - כך שבוע חדש תמיד אחרון.
     function getSortedWeekKeys() {
-        return Object.keys(weeksData).sort((a, b) => getWeekStartTimestamp(a) - getWeekStartTimestamp(b));
+        let all = Object.keys(weeksData);
+        let dated = [], undated = [];
+        all.forEach(k => { (getWeekDate(k) === null ? undated : dated).push(k); });
+        dated.sort((a, b) => getWeekDate(a) - getWeekDate(b));
+        return undated.concat(dated);
     }
 
     function initWeekSelector() {
@@ -541,7 +562,9 @@
         getSortedWeekKeys().forEach(key => {
             let opt = document.createElement('option');
             opt.value = key;
-            opt.text = weeksData[key].label || key.replace(/_/g, " ");
+            let txt = weeksData[key].label || key.replace(/_/g, " ");
+            if (getWeekDate(key) === null) txt += "  ⚠️ (ללא תאריך)";
+            opt.text = txt;
             selector.appendChild(opt);
         });
         let lastWeek = localStorage.getItem('lastSelectedWeek');
@@ -707,18 +730,112 @@
         }
     }
 
-    function addNewWeek() {
-        let weekName = prompt("הכנס שם או תאריך לשבוע החדש (לדוגמה: 31 מאי 2026):");
-        if(weekName && weekName.trim()) {
-            let key = "שבוע_" + weekName.trim().replace(/ /g, "_");
-            if(!weeksData[key]) {
-                weeksData[key] = { label: "שבוע " + weekName, shifts: {}, constraints: {} };
-                localStorage.setItem('weeksData', JSON.stringify(weeksData));
-                initWeekSelector();
-                document.getElementById('currentWeek').value = key;
-                switchWeek();
-            }
+    // בניית תווית מלאה "יום ראשון, X - שבת, Y" מתוך תאריך תחילת השבוע
+    function buildWeekLabel(ts) {
+        let monthName = idx => Object.keys(hebrewMonths)[idx];
+        let s = new Date(ts), e = new Date(ts + 6 * 86400000);
+        let sTxt = `${s.getDate()} ${monthName(s.getMonth())} ${s.getFullYear()}`;
+        let eTxt = `${e.getDate()} ${monthName(e.getMonth())} ${e.getFullYear()}`;
+        return `יום ראשון, ${sTxt} - שבת, ${eTxt}`;
+    }
+    function buildWeekKey(ts) {
+        let monthName = idx => Object.keys(hebrewMonths)[idx];
+        let s = new Date(ts);
+        return `שבוע_${s.getDate()}_${monthName(s.getMonth())}_${s.getFullYear()}`;
+    }
+    // הזזה ליום ראשון (תחילת שבוע העבודה)
+    function snapToSunday(ts) {
+        let d = new Date(ts);
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() - d.getDay()); // 0 = ראשון
+        return d.getTime();
+    }
+
+    // לחיצה אחת: פותח אוטומטית את השבוע הבא ברצף, עם שם מלא מתאריך עד תאריך
+    // מחיקת השבוע הפעיל (עם אישור, ועם הגנה מפני מחיקת השבוע האחרון)
+    function deleteWeek() {
+        let key = document.getElementById('currentWeek').value;
+        if (!key || !weeksData[key]) return;
+
+        let allKeys = Object.keys(weeksData);
+        if (allKeys.length <= 1) {
+            alert("לא ניתן למחוק את השבוע היחיד שנותר.\nפתח שבוע חדש לפני המחיקה.");
+            return;
         }
+
+        let label = weeksData[key].label || key.replace(/_/g, " ");
+
+        // ספירת שיבוצים קיימים כדי להזהיר אם מוחקים סידור מלא
+        let shifts = weeksData[key].shifts || {};
+        let filled = Object.keys(shifts).filter(k => shifts[k] && shifts[k] !== "").length;
+        let warn = filled > 0
+            ? `\n\n⚠️ שים לב: בשבוע זה יש ${filled} שיבוצים שיימחקו.`
+            : "\n\nהשבוע ריק משיבוצים.";
+
+        if (!confirm(`למחוק את השבוע:\n"${label}"?${warn}\n\nלא ניתן לשחזר פעולה זו (אלא מגיבוי).`)) return;
+
+        // מעבר לשבוע שכן ברשימה לפני המחיקה
+        let sorted = getSortedWeekKeys();
+        let idx = sorted.indexOf(key);
+        let nextKey = sorted[idx + 1] || sorted[idx - 1];
+
+        delete weeksData[key];
+        localStorage.setItem('weeksData', JSON.stringify(weeksData));
+
+        if (nextKey) localStorage.setItem('lastSelectedWeek', nextKey);
+        initWeekSelector();
+        if (nextKey) document.getElementById('currentWeek').value = nextKey;
+        switchWeek();
+    }
+
+    function addNewWeek() {
+        // מאתרים את השבוע המתוארך האחרון
+        let latestTs = null;
+        for (let k in weeksData) {
+            let t = getWeekDate(k);
+            if (t !== null && (latestTs === null || t > latestTs)) latestTs = t;
+        }
+
+        // השבוע הבא = שבוע אחרי האחרון; אם אין שבועות מתוארכים - יום ראשון הקרוב
+        let nextTs = (latestTs !== null) ? snapToSunday(latestTs) + 7 * 86400000 : snapToSunday(Date.now());
+
+        // אם כבר קיים - מתקדמים שבוע קדימה עד שנמצא פנוי
+        let key = buildWeekKey(nextTs), guard = 0;
+        while (weeksData[key] && guard < 260) {
+            nextTs += 7 * 86400000;
+            key = buildWeekKey(nextTs);
+            guard++;
+        }
+
+        weeksData[key] = {
+            label: buildWeekLabel(nextTs),
+            startDate: new Date(nextTs).toISOString(),
+            shifts: {},
+            constraints: {}
+        };
+        localStorage.setItem('weeksData', JSON.stringify(weeksData));
+        initWeekSelector();
+        document.getElementById('currentWeek').value = key;
+        switchWeek();
+    }
+
+    // קביעה/תיקון של תאריך תחילת השבוע הפעיל (מעדכן גם את השם אוטומטית)
+    function setWeekDate() {
+        let key = document.getElementById('currentWeek').value;
+        if (!key || !weeksData[key]) return;
+        let cur = getWeekDate(key);
+        let curTxt = cur !== null ? new Date(cur).toLocaleDateString('he-IL') : "";
+        let inp = prompt("תאריך תחילת השבוע (יום ראשון) בפורמט dd/mm/yyyy:", curTxt);
+        if (inp === null) return;
+        let ts = parseDateFromText(inp.trim());
+        if (ts === null) { alert("תאריך לא תקין."); return; }
+        ts = snapToSunday(ts);
+        weeksData[key].startDate = new Date(ts).toISOString();
+        weeksData[key].label = buildWeekLabel(ts);
+        localStorage.setItem('weeksData', JSON.stringify(weeksData));
+        initWeekSelector();
+        document.getElementById('currentWeek').value = key;
+        switchWeek();
     }
 
     function switchWeek() {
@@ -800,12 +917,26 @@
     }
 
     function getPreviousWeekKey(currentKey) {
-        let keys = getSortedWeekKeys();
-        let currentIndex = keys.indexOf(currentKey);
-        if (currentIndex > 0) {
-            return keys[currentIndex - 1];
+        let curTs = getWeekDate(currentKey);
+        if (curTs === null) {
+            // שבוע ללא תאריך: נופלים לסדר התצוגה
+            let keys = getSortedWeekKeys();
+            let i = keys.indexOf(currentKey);
+            return i > 0 ? keys[i - 1] : null;
         }
-        return null;
+        // מחפשים את השבוע המתוארך הקרוב ביותר שלפניו
+        let best = null, bestTs = -Infinity;
+        for (let k in weeksData) {
+            if (k === currentKey) continue;
+            let t = getWeekDate(k);
+            if (t === null) continue;
+            if (t < curTs && t > bestTs) { bestTs = t; best = k; }
+        }
+        if (best === null) return null;
+        // רק אם הוא באמת צמוד (עד 10 ימים) הוא נחשב "השבוע הקודם" לצורך רצפים ומנוחה
+        let gapDays = Math.round((curTs - bestTs) / 86400000);
+        if (gapDays > 10) return null;
+        return best;
     }
 
     function setRestDay(emp, day) {
@@ -876,7 +1007,7 @@
         
         let dayMaps = [{}, {}, {}, {}, {}, {}, {}];
 
-        allSelects.forEach(s => { s.classList.remove('alert-cell'); applySelectColor(s); });
+        allSelects.forEach(s => { s.classList.remove('alert-cell'); s.classList.remove('blocked-cell'); applySelectColor(s); });
 
         allSelects.forEach(select => {
             let rawEmp = select.value;
@@ -966,24 +1097,34 @@
         globalEmployees.forEach(emp => {
             if (emp.includes('+')) return;
 
+            // ספירת ימי עבודה רצופים בסוף השבוע/ות הקודמים (שרשור אחורה עד 4 שבועות)
             let prevConsecutiveDays = 0;
-            if (prevWeekShifts) {
-                for (let d = 6; d >= 0; d--) {
-                    let workedInDay = false;
-                    plazas.forEach(plz => {
-                        shiftTypes.forEach(shf => {
-                            let rawVal = prevWeekShifts[`${plz}_${shf}_${d}`];
-                            if (rawVal && rawVal !== "כפולה") {
-                                let subs = getSubEmployees(rawVal).map(s => {
-                                    let m = findGlobalEmployee(s);
-                                    return m ? m : s;
-                                });
-                                if (subs.includes(emp)) workedInDay = true;
-                            }
+            {
+                let chainKey = prevWeekKey;
+                let guard = 0;
+                while (chainKey && weeksData[chainKey] && guard < 4) {
+                    let shifts = weeksData[chainKey].shifts || {};
+                    let fullWeek = true;
+                    for (let d = 6; d >= 0; d--) {
+                        let workedInDay = false;
+                        plazas.forEach(plz => {
+                            shiftTypes.forEach(shf => {
+                                let rawVal = shifts[`${plz}_${shf}_${d}`];
+                                if (rawVal && rawVal !== "כפולה") {
+                                    let subs = getSubEmployees(rawVal).map(s => {
+                                        let m = findGlobalEmployee(s);
+                                        return m ? m : s;
+                                    });
+                                    if (subs.includes(emp)) workedInDay = true;
+                                }
+                            });
                         });
-                    });
-                    if (workedInDay) prevConsecutiveDays++;
-                    else break;
+                        if (workedInDay) prevConsecutiveDays++;
+                        else { fullWeek = false; break; }
+                    }
+                    if (!fullWeek) break;            // הרצף נקטע -> מפסיקים
+                    chainKey = getPreviousWeekKey(chainKey); // עבד שבוע שלם -> ממשיכים אחורה
+                    guard++;
                 }
             }
 
